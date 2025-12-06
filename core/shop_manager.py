@@ -120,6 +120,50 @@ class ShopManager:
 
         return selected
 
+    def _calculate_stock(self, weight: int) -> int:
+        """根据权重计算库存数量
+
+        权重越高，物品越常见，库存越多
+        权重越低，物品越稀有，库存越少（最少为1）
+
+        Args:
+            weight: 物品的商店权重
+
+        Returns:
+            库存数量（最小为1）
+        """
+        # 获取库存计算基数，默认100
+        stock_divisor = self.config.get("SHOP_STOCK_DIVISOR", 100)
+
+        # 库存 = 权重 / 基数，向上取整，最小为1
+        stock = max(1, (weight + stock_divisor - 1) // stock_divisor)
+
+        return stock
+
+    def ensure_items_have_stock(self, shop_items: List[Dict]) -> bool:
+        """确保已有商店物品列表包含库存字段（用于兼容旧数据）
+
+        Args:
+            shop_items: 商店物品列表
+
+        Returns:
+            是否发生了修改
+        """
+        updated = False
+        for item in shop_items:
+            stock = item.get('stock')
+            if stock is None:
+                data = item.get('data', {})
+                weight = 0
+                if isinstance(data, dict):
+                    weight = data.get('shop_weight') or data.get('weight') or 0
+                item['stock'] = self._calculate_stock(weight)
+                updated = True
+            elif stock < 0:
+                item['stock'] = 0
+                updated = True
+        return updated
+
     def generate_shop_items(self, count: int) -> List[Dict]:
         """生成商店物品列表
 
@@ -127,7 +171,7 @@ class ShopManager:
             count: 要生成的物品数量
 
         Returns:
-            商店物品列表，每个物品包含 id, name, type, price, discount, final_price
+            商店物品列表，每个物品包含 id, name, type, price, discount, final_price, stock
         """
         all_items = self._get_all_shop_items()
         if not all_items:
@@ -148,6 +192,9 @@ class ShopManager:
             discount = random.uniform(discount_min, discount_max)
             final_price = int(item['price'] * discount)
 
+            # 计算库存（基于权重）
+            stock = self._calculate_stock(item['weight'])
+
             shop_items.append({
                 'id': item['id'],
                 'name': item['name'],
@@ -156,6 +203,7 @@ class ShopManager:
                 'original_price': item['price'],
                 'discount': discount,
                 'price': final_price,
+                'stock': stock,
                 'data': item['data']
             })
 
@@ -193,8 +241,13 @@ class ShopManager:
             return "商店暂无物品出售"
 
         lines = ["=== 修仙商店 ===\n"]
+        display_index = 1
 
-        for idx, item in enumerate(shop_items, 1):
+        for item in shop_items:
+            stock = item.get('stock', 0)
+            if stock is None or stock <= 0:
+                continue
+
             discount_text = ""
             if item['discount'] < 1.0:
                 discount_percent = int((1.0 - item['discount']) * 100)
@@ -215,15 +268,23 @@ class ShopManager:
                 '丹药': '丹药'
             }.get(item['type'], '物品')
 
-            line = f"{idx}. [{item['rank']}] {item['name']} ({type_label}){discount_text}\n"
-            line += f"   价格: {item['price']} 灵石"
+            # 库存显示
+            stock_text = f" 库存紧张:{stock}" if stock <= 3 else f" 库存:{stock}"
+
+            line = f"{display_index}. [{item['rank']}] {item['name']} ({type_label}){discount_text}\n"
+            line += f"   价格: {item['price']} 灵石{stock_text}"
 
             if item['original_price'] != item['price']:
                 line += f" (原价: {item['original_price']})"
 
             lines.append(line + "\n")
+            display_index += 1
 
-        lines.append(f"\n提示: 使用 '购买 [物品名]' 购买物品")
+        if display_index == 1:
+            lines.append("当前所有商品均已售罄，请等待下一次刷新。\n")
+        else:
+            lines.append(f"\n提示: 使用 '购买 [物品名]' 购买物品")
+
         return "".join(lines)
 
     def get_item_details(self, item_data: Dict) -> str:

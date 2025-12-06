@@ -198,3 +198,96 @@ class DataBase:
         )
         await self.conn.commit()
 
+    async def decrement_shop_item_stock(self, shop_id: str, item_name: str) -> tuple[bool, int, int]:
+        """尝试扣减指定商店物品的库存（原子操作）
+
+        Args:
+            shop_id: 商店ID
+            item_name: 物品名称
+
+        Returns:
+            (是否成功, last_refresh_time, 扣减后的库存数量)
+        """
+        await self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            async with self.conn.execute(
+                "SELECT last_refresh_time, current_items FROM shop WHERE shop_id = ?",
+                (shop_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+
+            if not row:
+                await self.conn.rollback()
+                return False, 0, 0
+
+            last_refresh_time = row[0]
+            try:
+                current_items = json.loads(row[1])
+            except:
+                current_items = []
+
+            target_index = -1
+            for idx, item in enumerate(current_items):
+                if item.get('name') == item_name:
+                    target_index = idx
+                    break
+
+            if target_index == -1:
+                await self.conn.rollback()
+                return False, last_refresh_time, 0
+
+            stock = current_items[target_index].get('stock', 0)
+            if stock is None or stock <= 0:
+                await self.conn.rollback()
+                return False, last_refresh_time, max(stock or 0, 0)
+
+            new_stock = stock - 1
+            current_items[target_index]['stock'] = new_stock
+
+            items_json = json.dumps(current_items, ensure_ascii=False)
+            await self.conn.execute(
+                "UPDATE shop SET current_items = ?, last_refresh_time = ? WHERE shop_id = ?",
+                (items_json, last_refresh_time, shop_id)
+            )
+            await self.conn.commit()
+            return True, last_refresh_time, new_stock
+        except Exception:
+            await self.conn.rollback()
+            raise
+
+    async def increment_shop_item_stock(self, shop_id: str, item_name: str):
+        """回滚库存（在购买失败时恢复库存）"""
+        await self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            async with self.conn.execute(
+                "SELECT last_refresh_time, current_items FROM shop WHERE shop_id = ?",
+                (shop_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+
+            if not row:
+                await self.conn.rollback()
+                return
+
+            last_refresh_time = row[0]
+            try:
+                current_items = json.loads(row[1])
+            except:
+                current_items = []
+
+            for item in current_items:
+                if item.get('name') == item_name:
+                    current_stock = item.get('stock', 0) or 0
+                    item['stock'] = current_stock + 1
+                    break
+
+            items_json = json.dumps(current_items, ensure_ascii=False)
+            await self.conn.execute(
+                "UPDATE shop SET current_items = ?, last_refresh_time = ? WHERE shop_id = ?",
+                (items_json, last_refresh_time, shop_id)
+            )
+            await self.conn.commit()
+        except Exception:
+            await self.conn.rollback()
+            raise
+
