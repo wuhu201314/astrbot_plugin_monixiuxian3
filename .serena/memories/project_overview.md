@@ -1,8 +1,27 @@
 # 项目概览
-- 目的：AstrBot 插件“文字修仙”（模拟修仙），提供文字版修仙养成玩法（角色、境界、闭关、装备、突破、商店等）。
-- 技术栈：Python 3.8+、AstrBot 框架、aiosqlite（SQLite 异步）、async/await；dataclass 数据模型；JSON 配置驱动。
-- 主要架构：入口层 main.py（注册插件、命令路由与白名单）；handlers 层（player/equipment/breakthrough/pill/shop/misc）；core 层（CultivationManager 等业务算法）；data 层（DataBase + MigrationManager 处理 SQLite 与版本升级）；config 层（level/items/weapons/pills/bosses/tags 等配置 JSON）。
-- 数据库：SQLite，迁移版本最新 LATEST_DB_VERSION=8，装饰器方式注册 MIGRATION_TASKS，缺表时自动创建并写入 db_info。
-- 关键模型：models.py 的 Player/Item 使用 @dataclass；支持装备栏（武器、防具、心法/功法），灵根与属性累加。
-- 插件元信息：metadata.yaml（name=模拟修仙，version=v1.0.0dev，repo=https://github.com/linjianyan0229/astrbot_plugin_monixiuxian）。
-- 游戏指令：见 README（修仙帮助/我要修仙/闭关/出关/签到/装备/突破/商店等）。
+
+## 项目名称
+astrbot_plugin_monixiuxian (AstrBot 插件：模拟修仙)
+
+## 项目目的
+一款基于 AstrBot 设计的文字修仙游戏插件。提供完整的修仙成长体验，包含角色创建、属性成长、装备系统、突破系统、丹药系统、商店系统等核心玩法。
+
+## 版本信息
+- 当前版本：v1.0.1dev
+- 许可证：AGPL-3.0
+- 作者：linjianyan0229
+- 原作者：oldPeter616
+- 架构设计：@Zhalslar
+
+## 核心特性
+1. **角色系统**：17种灵根、双修炼路线（灵修/体修）、随机初始属性
+2. **成长系统**：36个境界（从炼气期一层到混元大罗金仙）、闭关修炼、突破境界
+3. **装备系统**：四大装备栏（武器、防具、主修心法、功法），九大品级
+4. **丹药系统**：破境丹、修为丹药、恢复丹药、永久增益丹药
+5. **商店系统**：丹阁、器阁、百宝阁，自动刷新机制
+6. **突破系统**：破境丹辅助、死亡惩罚机制
+
+## 数据库
+- 类型：SQLite + aiosqlite（异步）
+- 当前版本：v9
+- 迁移系统：装饰器模式（@migration），支持增量升级

@@ -48,7 +48,8 @@ class EquipmentManager:
             physical_defense=item_config.get("physical_defense", 0),
             mental_power=item_config.get("mental_power", 0),
             exp_multiplier=item_config.get("exp_multiplier", 0.0),
-            spiritual_qi=item_config.get("spiritual_qi", 0)
+            spiritual_qi=item_config.get("spiritual_qi", 0),
+            blood_qi=item_config.get("blood_qi", 0)
         )
 
     def get_equipped_items(self, player: Player, items_data: dict, weapons_data: dict = None) -> List[Item]:

@@ -30,7 +30,8 @@ class Item:
 
     # 心法专属属性
     exp_multiplier: float = 0.0  # 修为倍率加成（仅心法有效）
-    spiritual_qi: int = 0  # 灵气加成（仅心法有效）
+    spiritual_qi: int = 0  # 灵气加成（仅心法有效，灵修）
+    blood_qi: int = 0  # 气血加成（仅心法有效，体修）
 
     def get_attribute_display(self) -> str:
         """获取属性加成的显示文本"""
@@ -49,6 +50,8 @@ class Item:
             attrs.append(f"修为倍率+{self.exp_multiplier:.1%}")
         if self.spiritual_qi > 0:
             attrs.append(f"灵气+{self.spiritual_qi}")
+        if self.blood_qi > 0:
+            attrs.append(f"气血+{self.blood_qi}")
         return "、".join(attrs) if attrs else "无属性加成"
 
 @dataclass
@@ -186,6 +189,7 @@ class Player:
             if item.item_type == "main_technique":
                 total["exp_multiplier"] += item.exp_multiplier
                 total["max_spiritual_qi"] += item.spiritual_qi
+                total["max_blood_qi"] += item.blood_qi
 
         # 应用丹药倍率效果
         if pill_multipliers:

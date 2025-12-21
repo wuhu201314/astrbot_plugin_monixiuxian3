@@ -216,7 +216,8 @@ class PillManager:
         effect_keys = [
             "cultivation_multiplier", "physical_damage_multiplier", "magic_damage_multiplier",
             "physical_defense_multiplier", "magic_defense_multiplier",
-            "lifespan_cost_per_minute", "lifespan_regen_per_minute", "spiritual_qi_regen_per_minute",
+            "lifespan_cost_per_minute", "lifespan_regen_per_minute",
+            "spiritual_qi_regen_per_minute", "blood_qi_regen_per_minute", "blood_qi_cost_per_minute",
             "breakthrough_bonus"
         ]
         for key in effect_keys:
@@ -285,6 +286,14 @@ class PillManager:
         if "spiritual_qi_regen_per_minute" in pill_data:
             regen = pill_data["spiritual_qi_regen_per_minute"]
             effect_desc.append(f"每分钟恢复灵气+{regen}")
+
+        if "blood_qi_regen_per_minute" in pill_data:
+            regen = pill_data["blood_qi_regen_per_minute"]
+            effect_desc.append(f"每分钟恢复气血+{regen}")
+
+        if "blood_qi_cost_per_minute" in pill_data:
+            cost = pill_data["blood_qi_cost_per_minute"]
+            effect_desc.append(f"每分钟扣除气血-{cost}")
 
         if "breakthrough_bonus" in pill_data:
             bonus = pill_data["breakthrough_bonus"]
@@ -765,6 +774,7 @@ class PillManager:
             "mental_power",
             "lifespan",
             "max_spiritual_qi",
+            "max_blood_qi",
         ]
 
         changed = False
