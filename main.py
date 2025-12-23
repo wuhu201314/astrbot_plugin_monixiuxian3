@@ -2,6 +2,7 @@ from pathlib import Path
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.star import Context, Star, register
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from .data import DataBase, MigrationManager
 from .config_manager import ConfigManager
 from .handlers import MiscHandler, PlayerHandler, EquipmentHandler, BreakthroughHandler, PillHandler, ShopHandler, StorageRingHandler
@@ -38,7 +39,7 @@ CMD_REJECT_GIFT = "拒绝"
     "astrbot_plugin_xiuxian_lite",
     "linjianyan0229",
     "基于astrbot框架的文字修仙游戏",
-    "1.0.4",
+    "1.0.5dev",
     "https://github.com/linjianyan0229/astrbot_plugin_monixiuxian"
 )
 class XiuXianPlugin(Star):
@@ -51,8 +52,11 @@ class XiuXianPlugin(Star):
         self.config_manager = ConfigManager(_current_dir)
 
         files_config = self.config.get("FILES", {})
-        db_file = files_config.get("DATABASE_FILE", "xiuxian_data_lite.db")
-        self.db = DataBase(db_file)
+        db_filename = files_config.get("DATABASE_FILE", "xiuxian_data_lite.db")
+        plugin_data_path = get_astrbot_data_path() / "plugin_data" / self.name
+        plugin_data_path.mkdir(parents=True, exist_ok=True)
+        db_path = plugin_data_path / db_filename
+        self.db = DataBase(str(db_path))
 
         self.misc_handler = MiscHandler(self.db)
         self.player_handler = PlayerHandler(self.db, self.config, self.config_manager)
@@ -65,7 +69,7 @@ class XiuXianPlugin(Star):
         access_control_config = self.config.get("ACCESS_CONTROL", {})
         self.whitelist_groups = [str(g) for g in access_control_config.get("WHITELIST_GROUPS", [])]
 
-        logger.info("【修仙插件】XiuXianPlugin 初始化完成。")
+        logger.info(f"【修仙插件】XiuXianPlugin 初始化完成，数据库路径: {db_path}")
 
     def _check_access(self, event: AstrMessageEvent) -> bool:
         """检查访问权限，支持群聊白名单控制"""

@@ -271,7 +271,7 @@
         "description": "数据库文件名",
         "type": "string",
         "default": "xiuxian_data_lite.db",
-        "hint": "存储玩家数据的SQLite数据库文件名。"
+        "hint": "存储玩家数据的SQLite数据库文件名，数据库将存储在 data/plugin_data/{插件名}/ 目录下。"
       }
     }
   }
