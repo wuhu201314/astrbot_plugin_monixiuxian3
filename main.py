@@ -53,7 +53,7 @@ class XiuXianPlugin(Star):
 
         files_config = self.config.get("FILES", {})
         db_filename = files_config.get("DATABASE_FILE", "xiuxian_data_lite.db")
-        plugin_data_path = get_astrbot_data_path() / "plugin_data" / self.name
+        plugin_data_path = Path(get_astrbot_data_path()) / "plugin_data" / "astrbot_plugin_xiuxian_lite"
         plugin_data_path.mkdir(parents=True, exist_ok=True)
         db_path = plugin_data_path / db_filename
         self.db = DataBase(str(db_path))
