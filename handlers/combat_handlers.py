@@ -5,9 +5,10 @@ from ..managers.combat_manager import CombatManager, CombatStats
 from ..data.data_manager import DataBase
 
 class CombatHandlers:
-    def __init__(self, db: DataBase, combat_mgr: CombatManager):
+    def __init__(self, db: DataBase, combat_mgr: CombatManager, config_manager=None):
         self.db = db
         self.combat_mgr = combat_mgr
+        self.config_manager = config_manager
 
     async def _get_target_id(self, event: AstrMessageEvent, arg: str) -> str:
         for component in event.message_obj.message:
@@ -17,34 +18,58 @@ class CombatHandlers:
             return arg
         return None
 
+    def _calculate_equipment_bonus(self, player) -> int:
+        """计算装备提供的额外攻击力"""
+        if not self.config_manager:
+            return 0
+            
+        bonus = 0
+        # 武器
+        if player.weapon and player.weapon in self.config_manager.weapons_data:
+            data = self.config_manager.weapons_data[player.weapon]
+            # 兼容旧版属性：物攻+法攻=总攻击
+            bonus += data.get("atk", 0)
+            bonus += data.get("physical_damage", 0)
+            bonus += data.get("magic_damage", 0)
+            
+        # 防具通常加防御，这里暂不计算（CombatStats有defense字段，后续可加）
+        
+        return bonus
+
     async def _prepare_combat_stats(self, user_id: str) -> CombatStats:
         player = await self.db.get_player_by_id(user_id)
         if not player:
             return None
         
-        # 确保战斗属性已计算
-        if player.hp == 0 or player.mp == 0:
-            # 简单计算，不带buff，实际应该调用统一的计算逻辑含buff
-            hp, mp = self.combat_mgr.calculate_hp_mp(player.experience)
-            atk = self.combat_mgr.calculate_atk(player.experience, player.atkpractice)
-            player.hp = hp
-            player.mp = mp
-            player.atk = atk
-            # 这里不保存回数据库，只用于临时计算？或者保存？
-            # 最好是保存，避免重复计算
-            await self.db.update_player(player)
-
-        # 获取 Buff 信息 (暂时简化，不查询 database_extended 的 buff_info)
-        # 如果需要精准计算，应该引入 DatabaseExtended 并查询 ImpartInfo 等
+        # 获取基础属性
+        # 注意：这里我们重新计算属性以确保即时性，特别是Buff
+        impart_info = await self.db.ext.get_impart_info(user_id)
+        hp_buff = impart_info.impart_hp_per if impart_info else 0.0
+        mp_buff = impart_info.impart_mp_per if impart_info else 0.0
+        atk_buff = impart_info.impart_atk_per if impart_info else 0.0
         
+        # 计算属性
+        hp, mp = self.combat_mgr.calculate_hp_mp(player.experience, hp_buff, mp_buff)
+        base_atk = self.combat_mgr.calculate_atk(player.experience, player.atkpractice, atk_buff)
+        
+        # 加上装备加成
+        equip_atk = self._calculate_equipment_bonus(player)
+        final_atk = base_atk + equip_atk
+        
+        # 更新Player对象（可选，为了持久化）
+        player.hp = hp
+        player.mp = mp
+        player.atk = final_atk
+        await self.db.update_player(player)
+
         return CombatStats(
             user_id=user_id,
             name=player.user_name if player.user_name else f"道友{user_id}",
-            hp=player.hp,
-            max_hp=player.hp, # 注意：这里当前HP可能不是满的，CombatStats的max_hp应该重新计算
-            mp=player.mp,
-            max_mp=player.mp, # 同上
-            atk=player.atk,
+            hp=hp,
+            max_hp=int(player.experience * (1 + hp_buff) // 2), 
+            mp=mp,
+            max_mp=int(player.experience * (1 + mp_buff)),
+            atk=final_atk,
             exp=player.experience
         )
 

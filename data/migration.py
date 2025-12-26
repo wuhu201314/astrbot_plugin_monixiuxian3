@@ -295,7 +295,7 @@ async def _migrate_to_v11(conn: aiosqlite.Connection, config_manager: ConfigMana
 
 
 async def _create_all_tables_v2(conn: aiosqlite.Connection):
-    """创建所有表 - v2版本，新属性系统（灵修/体修）"""
+    """创建所有表 - v2版本，完整修仙系统"""
 
     # 数据库版本信息表
     await conn.execute("""
@@ -304,16 +304,30 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
         )
     """)
 
-    # 玩家表 - 新属性系统
+    # 玩家表 - 完整字段
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS players (
             user_id TEXT PRIMARY KEY,
+            user_name TEXT NOT NULL DEFAULT '',
             level_index INTEGER NOT NULL DEFAULT 0,
-            spiritual_root TEXT NOT NULL DEFAULT '未知',
             cultivation_type TEXT NOT NULL DEFAULT '灵修',
-            lifespan INTEGER NOT NULL DEFAULT 100,
             experience INTEGER NOT NULL DEFAULT 0,
             gold INTEGER NOT NULL DEFAULT 0,
+            hp INTEGER NOT NULL DEFAULT 0,
+            mp INTEGER NOT NULL DEFAULT 0,
+            atk INTEGER NOT NULL DEFAULT 0,
+            atkpractice INTEGER NOT NULL DEFAULT 0,
+            sect_id INTEGER NOT NULL DEFAULT 0,
+            sect_position INTEGER NOT NULL DEFAULT 4,
+            sect_contribution INTEGER NOT NULL DEFAULT 0,
+            sect_task INTEGER NOT NULL DEFAULT 0,
+            sect_elixir_get INTEGER NOT NULL DEFAULT 0,
+            blessed_spot_flag INTEGER NOT NULL DEFAULT 0,
+            blessed_spot_name TEXT NOT NULL DEFAULT '',
+            level_up_rate INTEGER NOT NULL DEFAULT 0,
+            
+            spiritual_root TEXT NOT NULL DEFAULT '未知',
+            lifespan INTEGER NOT NULL DEFAULT 100,
             state TEXT NOT NULL DEFAULT '空闲',
             cultivation_start_time INTEGER NOT NULL DEFAULT 0,
             last_check_in_date TEXT NOT NULL DEFAULT '',
@@ -326,10 +340,12 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
             magic_defense INTEGER NOT NULL DEFAULT 5,
             physical_defense INTEGER NOT NULL DEFAULT 5,
             mental_power INTEGER NOT NULL DEFAULT 100,
+            
             weapon TEXT NOT NULL DEFAULT '',
             armor TEXT NOT NULL DEFAULT '',
             main_technique TEXT NOT NULL DEFAULT '',
             techniques TEXT NOT NULL DEFAULT '[]',
+            
             active_pill_effects TEXT NOT NULL DEFAULT '[]',
             permanent_pill_gains TEXT NOT NULL DEFAULT '{}',
             has_resurrection_pill INTEGER NOT NULL DEFAULT 0,
@@ -351,14 +367,100 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
             current_items TEXT NOT NULL DEFAULT '[]'
         )
     """)
-
     # 插入全局商店数据
     await conn.execute("""
         INSERT OR IGNORE INTO shop (shop_id, last_refresh_time, current_items)
         VALUES ('global', 0, '[]')
     """)
+    
+    # 创建宗门表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS sects (
+            sect_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sect_name TEXT NOT NULL UNIQUE,
+            sect_owner TEXT NOT NULL,
+            sect_scale INTEGER NOT NULL DEFAULT 0,
+            sect_used_stone INTEGER NOT NULL DEFAULT 0,
+            sect_fairyland INTEGER NOT NULL DEFAULT 0,
+            sect_materials INTEGER NOT NULL DEFAULT 0,
+            mainbuff TEXT NOT NULL DEFAULT '0',
+            secbuff TEXT NOT NULL DEFAULT '0',
+            elixir_room_level INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_sect_owner ON sects(sect_owner)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_sect_scale ON sects(sect_scale DESC)")
+    
+    # 创建Buff信息表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS buff_info (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL UNIQUE,
+            main_buff INTEGER NOT NULL DEFAULT 0,
+            sec_buff INTEGER NOT NULL DEFAULT 0,
+            faqi_buff INTEGER NOT NULL DEFAULT 0,
+            fabao_weapon INTEGER NOT NULL DEFAULT 0,
+            armor_buff INTEGER NOT NULL DEFAULT 0,
+            atk_buff INTEGER NOT NULL DEFAULT 0,
+            blessed_spot INTEGER NOT NULL DEFAULT 0,
+            sub_buff INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_buff_user ON buff_info(user_id)")
+    
+    # 创建Boss表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS boss (
+            boss_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            boss_name TEXT NOT NULL,
+            boss_level TEXT NOT NULL,
+            hp INTEGER NOT NULL,
+            max_hp INTEGER NOT NULL,
+            atk INTEGER NOT NULL,
+            defense INTEGER NOT NULL DEFAULT 0,
+            stone_reward INTEGER NOT NULL DEFAULT 0,
+            create_time INTEGER NOT NULL DEFAULT 0,
+            status INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_boss_status ON boss(status, create_time DESC)")
+    
+    # 创建秘境表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS rifts (
+            rift_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rift_name TEXT NOT NULL,
+            rift_level INTEGER NOT NULL,
+            required_level INTEGER NOT NULL,
+            rewards TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    
+    # 创建传承信息表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS impart_info (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL UNIQUE,
+            impart_hp_per REAL NOT NULL DEFAULT 0.0,
+            impart_mp_per REAL NOT NULL DEFAULT 0.0,
+            impart_atk_per REAL NOT NULL DEFAULT 0.0,
+            impart_know_per REAL NOT NULL DEFAULT 0.0,
+            impart_burst_per REAL NOT NULL DEFAULT 0.0
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_impart_user ON impart_info(user_id)")
+    
+    # 创建用户CD表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_cd (
+            user_id TEXT PRIMARY KEY,
+            type INTEGER NOT NULL DEFAULT 0,
+            create_time INTEGER NOT NULL DEFAULT 0,
+            scheduled_time INTEGER NOT NULL DEFAULT 0
+        )
+    """)
 
-    logger.info("数据库表已创建完成（v2 - 新属性系统）")
+    logger.info("数据库表已创建完成（v2 - 完整修仙系统）")
 
 
 @migration(12)

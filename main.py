@@ -54,6 +54,7 @@ CMD_SECT_LIST = "宗门列表"
 CMD_SECT_DONATE = "宗门捐献"
 CMD_SECT_KICK = "踢出成员"
 CMD_SECT_TRANSFER = "宗主传位"
+CMD_SECT_TASK = "宗门任务"
 CMD_SECT_POSITION = "职位变更"
 
 # Boss系统指令
@@ -89,11 +90,11 @@ CMD_ALCHEMY_CRAFT = "炼丹"
 CMD_IMPART_INFO = "传承信息"
 
 @register(
-    "astrbot_plugin_xiuxian_lite",
+    "astrbot_plugin_monixiuxian2",
     "linjianyan0229",
-    "基于astrbot框架的文字修仙游戏",
-    "1.0.5dev",
-    "https://github.com/linjianyan0229/astrbot_plugin_monixiuxian"
+    "基于astrbot框架的文字修仙游戏（重构版）",
+    "2.0.0",
+    "https://github.com/xiaojuwa/astrbot_plugin_monixiuxian"
 )
 class XiuXianPlugin(Star):
     """修仙插件 - 文字修仙游戏"""
@@ -105,8 +106,8 @@ class XiuXianPlugin(Star):
         self.config_manager = ConfigManager(_current_dir)
 
         files_config = self.config.get("FILES", {})
-        db_filename = files_config.get("DATABASE_FILE", "xiuxian_data_lite.db")
-        plugin_data_path = Path(get_astrbot_data_path()) / "plugin_data" / "astrbot_plugin_xiuxian_lite"
+        db_filename = files_config.get("DATABASE_FILE", "xiuxian_data_v2.db")
+        plugin_data_path = Path(get_astrbot_data_path()) / "plugin_data" / "astrbot_plugin_monixiuxian2"
         plugin_data_path.mkdir(parents=True, exist_ok=True)
         db_path = plugin_data_path / db_filename
         self.db = DataBase(str(db_path))
@@ -132,7 +133,7 @@ class XiuXianPlugin(Star):
         # 初始化新功能处理器
         self.sect_handlers = SectHandlers(self.db, self.sect_mgr)
         self.boss_handlers = BossHandlers(self.db, self.boss_mgr)
-        self.combat_handlers = CombatHandlers(self.db, self.combat_mgr)
+        self.combat_handlers = CombatHandlers(self.db, self.combat_mgr, self.config_manager)
         self.ranking_handlers = RankingHandlers(self.db, self.rank_mgr)
         self.rift_handlers = RiftHandlers(self.db, self.rift_mgr)
         self.adventure_handlers = AdventureHandlers(self.db, self.adventure_mgr)
@@ -456,6 +457,14 @@ class XiuXianPlugin(Star):
             await self._send_access_denied_message(event)
             return
         async for r in self.sect_handlers.handle_my_sect(event):
+            yield r
+
+    @filter.command(CMD_SECT_TASK, "执行宗门任务")
+    async def handle_sect_task(self, event: AstrMessageEvent):
+        if not self._check_access(event):
+            await self._send_access_denied_message(event)
+            return
+        async for r in self.sect_handlers.handle_sect_task(event):
             yield r
 
     @filter.command(CMD_SECT_LIST, "查看宗门列表")

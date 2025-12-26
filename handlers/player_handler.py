@@ -126,6 +126,62 @@ class PlayerHandler:
         )
         total_attrs = player.get_total_attributes(equipped_items, pill_multipliers)
 
+        # 尝试生成图片卡片
+        from ..utils.image_generator import ImageGenerator
+        img_gen = ImageGenerator()
+        
+        use_image = False
+        if img_gen.has_pil:
+            # 获取宗门名称
+            sect_name = "无"
+            position_name = "散修"
+            if player.sect_id != 0:
+                sect = await self.db.ext.get_sect_by_id(player.sect_id)
+                if sect.sect_owner == player.user_id:
+                    position_name = "宗主" # 简化，实际应查表
+                elif player.sect_position == 1:
+                    position_name = "长老"
+                else:
+                    position_name = "弟子"
+                sect_name = sect.sect_name if sect else "未知"
+
+            detail_map = {
+                "道号": player.user_name if player.user_name else display_name,
+                "境界": player.get_level(self.config_manager),
+                "修为": f"{int(player.experience)}/{int(required_exp)}",
+                "灵石": player.gold,
+                "战力": int(total_attrs.get("atk", 0)) + int(player.atk), # 基础+装备
+                "灵根": player.spiritual_root,
+                "突破状态": f"{player.level_up_rate}%",
+                "主修功法": player.main_technique if player.main_technique else "无",
+                "副修神通": "无",
+                "攻击力": int(total_attrs.get("atk", 0)) + int(player.atk),
+                "法器": player.weapon if player.weapon else "无",
+                "防具": player.armor if player.armor else "无",
+                "所在宗门": sect_name,
+                "宗门职位": position_name,
+                "注册位数": player.id,
+                # 排行榜暂未查询，显示未知
+                "修为排行": "未知",
+                "灵石排行": "未知"
+            }
+            
+            img_data = await img_gen.generate_user_info_card(user_id, detail_map)
+            if img_data:
+                # 保存临时文件
+                import os
+                temp_dir = self.config_manager._base_dir / "temp"
+                temp_dir.mkdir(exist_ok=True)
+                temp_path = temp_dir / f"user_card_{user_id}.jpg"
+                with open(temp_path, "wb") as f:
+                    f.write(img_data.getvalue())
+                yield event.image_result(str(temp_path))
+                use_image = True
+        
+        if use_image:
+            return
+
+        # 文本模式 (Fallback)
         # 根据修炼类型显示不同的信息
         if player.cultivation_type == "体修":
             # 体修显示气血，不显示法伤

@@ -451,3 +451,50 @@ class SectManager:
         await self.db.update_player(target)
         
         return True, f"✨ 已将 {target_name} 踢出宗门！"
+
+    async def perform_sect_task(self, user_id: str) -> Tuple[bool, str]:
+        """
+        执行宗门任务
+        
+        Args:
+            user_id: 用户ID
+            
+        Returns:
+            (成功标志, 消息)
+        """
+        player = await self.db.get_player_by_id(user_id)
+        if not player or player.sect_id == 0:
+            return False, "❌ 你还未加入宗门！"
+            
+        # 检查CD (使用宗门任务CD类型，假设为4)
+        user_cd = await self.db.ext.get_user_cd(user_id)
+        if not user_cd:
+            await self.db.ext.create_user_cd(user_id)
+            user_cd = await self.db.ext.get_user_cd(user_id)
+            
+        current_time = int(time.time())
+        # 假设 CD 记录在 type=4, scheduled_time 为下次可用时间
+        # 这里重用 set_user_busy 逻辑，但任务通常是瞬时的，只设冷却
+        if user_cd.type == 4 and current_time < user_cd.scheduled_time:
+            remaining = user_cd.scheduled_time - current_time
+            return False, f"❌ 宗门任务冷却中！还需 {remaining//60} 分钟。"
+
+        # 执行任务
+        contribution_gain = random.randint(10, 30)
+        stone_gain = contribution_gain * 10
+        
+        player.sect_contribution += contribution_gain
+        await self.db.update_player(player)
+        
+        # 宗门增加资源
+        await self.db.ext.donate_to_sect(player.sect_id, 0) # 只更新建设度? donate_to_sect update both.
+        # 手动更新宗门资源
+        sect = await self.db.ext.get_sect_by_id(player.sect_id)
+        if sect:
+            sect.sect_materials += stone_gain
+            await self.db.ext.update_sect(sect)
+
+        # 设置1小时冷却
+        await self.db.ext.set_user_busy(user_id, 4, current_time + 3600)
+        
+        return True, f"✨ 完成宗门任务！\n获得贡献：{contribution_gain}\n宗门资材：+{stone_gain}"

@@ -112,3 +112,9 @@ class SectHandlers:
 
         success, msg = await self.sect_mgr.change_position(user_id, target_id, position)
         yield event.plain_result(msg)
+
+    async def handle_sect_task(self, event: AstrMessageEvent):
+        """执行宗门任务"""
+        user_id = event.get_sender_id()
+        success, msg = await self.sect_mgr.perform_sect_task(user_id)
+        yield event.plain_result(msg)
