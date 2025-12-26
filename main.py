@@ -14,7 +14,7 @@ from .handlers import (
 )
 from .managers import (
     CombatManager, SectManager, BossManager, RiftManager, 
-    RankingManager, AdventureManager, AlchemyManager
+    RankingManager, AdventureManager, AlchemyManager, ImpartManager
 )
 
 # 指令定义
@@ -93,7 +93,7 @@ CMD_IMPART_INFO = "传承信息"
     "astrbot_plugin_monixiuxian2",
     "linjianyan0229",
     "基于astrbot框架的文字修仙游戏（重构版）",
-    "2.0.0",
+    "2.0.1",
     "https://github.com/xiaojuwa/astrbot_plugin_monixiuxian"
 )
 class XiuXianPlugin(Star):
