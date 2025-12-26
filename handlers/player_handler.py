@@ -180,49 +180,95 @@ class PlayerHandler:
         if use_image:
             return
 
-        # 文本模式 (Fallback)
-        # 根据修炼类型显示不同的信息
+        # 文本模式 (完整信息显示)
+        
+        # 获取战力（综合攻防）
+        combat_power = (
+            int(total_attrs['physical_damage']) + int(total_attrs['magic_damage']) +
+            int(total_attrs['physical_defense']) + int(total_attrs['magic_defense']) +
+            int(total_attrs['mental_power']) // 10
+        )
+        
+        # 获取宗门信息
+        sect_name = "无宗门"
+        position_name = "散修"
+        if player.sect_id and player.sect_id != 0:
+            sect = await self.db.ext.get_sect_by_id(player.sect_id)
+            if sect:
+                sect_name = sect.sect_name
+                if sect.sect_owner == player.user_id:
+                    position_name = "宗主"
+                elif player.sect_position == 1:
+                    position_name = "长老"
+                elif player.sect_position == 2:
+                    position_name = "亲传弟子"
+                elif player.sect_position == 3:
+                    position_name = "内门弟子"
+                else:
+                    position_name = "外门弟子"
+        
+        # 获取装备信息
+        weapon_name = player.weapon if player.weapon else "无"
+        armor_name = player.armor if player.armor else "无"
+        technique_name = player.main_technique if player.main_technique else "无"
+        
+        # 获取突破状态
+        breakthrough_rate = f"+{player.level_up_rate}%" if player.level_up_rate > 0 else "0%"
+        
+        # 构建信息显示
+        dao_hao = player.user_name if player.user_name else display_name
+        
+        reply_msg = (
+            f"╔══════════════════════╗\n"
+            f"║ 道友 {dao_hao} 的信息\n"
+            f"╚══════════════════════╝\n"
+            f"\n"
+            f"【基本信息】\n"
+            f"  道号：{dao_hao}\n"
+            f"  境界：{player.get_level(self.config_manager)}\n"
+            f"  修为：{int(player.experience):,}/{int(required_exp):,}\n"
+            f"  灵石：{player.gold:,}\n"
+            f"  战力：{combat_power:,}\n"
+            f"  灵根：{player.spiritual_root}\n"
+            f"  突破加成：{breakthrough_rate}\n"
+            f"\n"
+            f"【修炼属性】\n"
+            f"  修炼方式：{player.cultivation_type}\n"
+            f"  状态：{player.state}\n"
+            f"  寿命：{player.lifespan}\n"
+            f"  精神力：{total_attrs['mental_power']}\n"
+        )
+        
+        # 根据修炼类型添加不同属性
         if player.cultivation_type == "体修":
-            # 体修显示气血，不显示法伤
-            reply_msg = (
-                f"--- 道友 {display_name} 的信息 ---\n"
-                f"修炼方式：{player.cultivation_type}\n"
-                f"境界：{player.get_level(self.config_manager)}\n"
-                f"灵根：{player.spiritual_root}\n"
-                f"修为：{player.experience}/{required_exp}\n"
-                f"灵石：{player.gold}\n"
-                f"状态：{player.state}\n"
-                "--- 基础属性 ---\n"
-                f"⏳ 寿命: {player.lifespan}\n"
-                f"🧠 精神力: {total_attrs['mental_power']}\n"
-                "--- 战斗属性 ---\n"
-                f"🩸 气血: {player.blood_qi}/{total_attrs['max_blood_qi']}\n"
-                f"🗡️ 物伤: {total_attrs['physical_damage']}\n"
-                f"🪨 物防: {total_attrs['physical_defense']}\n"
-                f"🛡️ 法防: {total_attrs['magic_defense']}\n"
-                f"--------------------------"
+            reply_msg += (
+                f"  气血：{player.blood_qi}/{total_attrs.get('max_blood_qi', 0)}\n"
+                f"  物伤：{total_attrs['physical_damage']}\n"
+                f"  物防：{total_attrs['physical_defense']}\n"
+                f"  法防：{total_attrs['magic_defense']}\n"
             )
         else:
-            # 灵修显示灵气和法伤
-            reply_msg = (
-                f"--- 道友 {display_name} 的信息 ---\n"
-                f"修炼方式：{player.cultivation_type}\n"
-                f"境界：{player.get_level(self.config_manager)}\n"
-                f"灵根：{player.spiritual_root}\n"
-                f"修为：{player.experience}/{required_exp}\n"
-                f"灵石：{player.gold}\n"
-                f"状态：{player.state}\n"
-                "--- 基础属性 ---\n"
-                f"⏳ 寿命: {player.lifespan}\n"
-                f"🧠 精神力: {total_attrs['mental_power']}\n"
-                "--- 战斗属性 ---\n"
-                f"✨ 灵气: {player.spiritual_qi}/{total_attrs['max_spiritual_qi']}\n"
-                f"⚔️ 法伤: {total_attrs['magic_damage']}\n"
-                f"🗡️ 物伤: {total_attrs['physical_damage']}\n"
-                f"🛡️ 法防: {total_attrs['magic_defense']}\n"
-                f"🪨 物防: {total_attrs['physical_defense']}\n"
-                f"--------------------------"
+            reply_msg += (
+                f"  灵气：{player.spiritual_qi}/{total_attrs.get('max_spiritual_qi', 0)}\n"
+                f"  法伤：{total_attrs['magic_damage']}\n"
+                f"  物伤：{total_attrs['physical_damage']}\n"
+                f"  法防：{total_attrs['magic_defense']}\n"
+                f"  物防：{total_attrs['physical_defense']}\n"
             )
+        
+        reply_msg += (
+            f"\n"
+            f"【装备信息】\n"
+            f"  主修功法：{technique_name}\n"
+            f"  法器：{weapon_name}\n"
+            f"  防具：{armor_name}\n"
+            f"\n"
+            f"【宗门信息】\n"
+            f"  所在宗门：{sect_name}\n"
+            f"  宗门职位：{position_name}\n"
+            f"══════════════════════"
+        )
+        
         yield event.plain_result(reply_msg)
 
     @player_required
