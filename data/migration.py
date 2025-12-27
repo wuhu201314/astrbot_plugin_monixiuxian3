@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 17  # v17: 赠予请求持久化
+LATEST_DB_VERSION = 18  # v18: 银行贷款与交易流水系统
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -478,6 +478,38 @@ async def _create_all_tables_v2(conn: aiosqlite.Connection):
     """)
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_pending_gifts_receiver ON pending_gifts(receiver_id)")
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_pending_gifts_expires ON pending_gifts(expires_at)")
+    
+    # 创建银行贷款表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bank_loans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            principal INTEGER NOT NULL DEFAULT 0,
+            interest_rate REAL NOT NULL DEFAULT 0.005,
+            borrowed_at INTEGER NOT NULL,
+            due_at INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            loan_type TEXT NOT NULL DEFAULT 'normal',
+            UNIQUE(user_id, status)
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_loans_user ON bank_loans(user_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_loans_status ON bank_loans(status)")
+    
+    # 创建银行交易流水表
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bank_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            trans_type TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            balance_after INTEGER NOT NULL DEFAULT 0,
+            description TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_trans_user ON bank_transactions(user_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_trans_time ON bank_transactions(created_at)")
 
     logger.info("数据库表已创建完成（v2 - 完整修仙系统）")
 
@@ -798,3 +830,46 @@ async def _migrate_to_v17(conn: aiosqlite.Connection, config_manager: ConfigMana
     
     await conn.commit()
     logger.info("v17迁移完成：赠予请求持久化")
+
+
+@migration(18)
+async def _migrate_to_v18(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v18 - 银行贷款与交易流水系统"""
+    logger.info("开始迁移到v18：银行贷款与交易流水系统")
+    
+    # 1. 创建银行贷款表
+    logger.info("创建银行贷款表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bank_loans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            principal INTEGER NOT NULL DEFAULT 0,
+            interest_rate REAL NOT NULL DEFAULT 0.005,
+            borrowed_at INTEGER NOT NULL,
+            due_at INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            loan_type TEXT NOT NULL DEFAULT 'normal',
+            UNIQUE(user_id, status)
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_loans_user ON bank_loans(user_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_loans_status ON bank_loans(status)")
+    
+    # 2. 创建银行交易流水表
+    logger.info("创建银行交易流水表...")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bank_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            trans_type TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            balance_after INTEGER NOT NULL DEFAULT 0,
+            description TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_trans_user ON bank_transactions(user_id)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_trans_time ON bank_transactions(created_at)")
+    
+    await conn.commit()
+    logger.info("v18迁移完成：银行贷款与交易流水系统")

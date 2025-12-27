@@ -27,3 +27,8 @@ class RankingHandlers:
         """宗门排行"""
         success, msg = await self.rank_mgr.get_sect_ranking()
         yield event.plain_result(msg)
+    
+    async def handle_rank_deposit(self, event: AstrMessageEvent):
+        """存款排行"""
+        success, msg = await self.rank_mgr.get_deposit_ranking()
+        yield event.plain_result(msg)

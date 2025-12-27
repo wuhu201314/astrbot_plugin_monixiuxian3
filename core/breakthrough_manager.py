@@ -181,6 +181,9 @@ class BreakthroughManager:
 
             # 保存到数据库
             await self.db.update_player(player)
+            
+            # 检查并处理突破贷款自动还款
+            loan_msg = await self._handle_breakthrough_loan_repay(player)
 
             # 根据修炼类型生成不同的成功消息
             if player.cultivation_type == "体修":
@@ -235,6 +238,10 @@ class BreakthroughManager:
             logger.info(
                 f"玩家 {player.user_id} 突破成功：{current_level_name} -> {next_level_name}"
             )
+            
+            # 如果有贷款相关消息，追加到成功消息后
+            if loan_msg:
+                success_msg += f"\n\n{loan_msg}"
 
             return True, success_msg, False
 
@@ -324,3 +331,61 @@ class BreakthroughManager:
                 )
 
                 return False, fail_msg, False
+    
+    async def _handle_breakthrough_loan_repay(self, player: Player) -> str:
+        """处理突破贷款自动还款
+        
+        Args:
+            player: 玩家对象
+            
+        Returns:
+            还款消息（如果有贷款的话）
+        """
+        try:
+            # 检查是否有突破贷款
+            loan = await self.db.ext.get_active_loan(player.user_id)
+            if not loan or loan["loan_type"] != "breakthrough":
+                return ""
+            
+            # 计算应还金额
+            import time
+            now = int(time.time())
+            days_borrowed = max(1, (now - loan["borrowed_at"]) // 86400)
+            interest = int(loan["principal"] * loan["interest_rate"] * days_borrowed)
+            total_due = loan["principal"] + interest
+            
+            # 检查玩家是否有足够灵石
+            if player.gold >= total_due:
+                # 自动扣款
+                player.gold -= total_due
+                await self.db.update_player(player)
+                
+                # 关闭贷款
+                await self.db.ext.close_loan(loan["id"])
+                
+                # 记录流水
+                bank_data = await self.db.ext.get_bank_account(player.user_id)
+                balance = bank_data["balance"] if bank_data else 0
+                await self.db.ext.add_bank_transaction(
+                    player.user_id, "auto_repay", -total_due, balance,
+                    f"突破成功自动还款：本金{loan['principal']:,}+利息{interest:,}", now
+                )
+                
+                return (
+                    f"💰 突破贷款自动还款成功！\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"已还本金：{loan['principal']:,} 灵石\n"
+                    f"已还利息：{interest:,} 灵石\n"
+                    f"当前持有：{player.gold:,} 灵石"
+                )
+            else:
+                # 灵石不足，提醒玩家
+                return (
+                    f"⚠️ 你有未还清的突破贷款！\n"
+                    f"应还金额：{total_due:,} 灵石\n"
+                    f"当前持有：{player.gold:,} 灵石\n"
+                    f"请尽快使用 /还款 命令还款"
+                )
+        except Exception as e:
+            logger.warning(f"处理突破贷款自动还款异常: {e}")
+            return ""

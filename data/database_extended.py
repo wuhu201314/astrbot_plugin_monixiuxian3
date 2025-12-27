@@ -718,3 +718,123 @@ class DatabaseExtended:
             (now,)
         )
         await self.conn.commit()
+    
+    # ===== Phase 3: 银行贷款系统 CRUD =====
+    
+    async def get_active_loan(self, user_id: str) -> Optional[dict]:
+        """获取用户当前活跃的贷款"""
+        async with self.conn.execute(
+            """SELECT id, user_id, principal, interest_rate, borrowed_at, due_at, status, loan_type
+               FROM bank_loans WHERE user_id = ? AND status = 'active'""",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {
+                    "id": row[0],
+                    "user_id": row[1],
+                    "principal": row[2],
+                    "interest_rate": row[3],
+                    "borrowed_at": row[4],
+                    "due_at": row[5],
+                    "status": row[6],
+                    "loan_type": row[7]
+                }
+            return None
+    
+    async def create_loan(self, user_id: str, principal: int, interest_rate: float, 
+                          borrowed_at: int, due_at: int, loan_type: str = "normal") -> int:
+        """创建贷款记录"""
+        await self.conn.execute(
+            """INSERT INTO bank_loans (user_id, principal, interest_rate, borrowed_at, due_at, status, loan_type)
+               VALUES (?, ?, ?, ?, ?, 'active', ?)""",
+            (user_id, principal, interest_rate, borrowed_at, due_at, loan_type)
+        )
+        await self.conn.commit()
+        async with self.conn.execute("SELECT last_insert_rowid()") as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+    
+    async def close_loan(self, loan_id: int):
+        """关闭贷款（标记为已还清）"""
+        await self.conn.execute(
+            "UPDATE bank_loans SET status = 'closed' WHERE id = ?",
+            (loan_id,)
+        )
+        await self.conn.commit()
+    
+    async def mark_loan_overdue(self, loan_id: int):
+        """标记贷款逾期"""
+        await self.conn.execute(
+            "UPDATE bank_loans SET status = 'overdue' WHERE id = ?",
+            (loan_id,)
+        )
+        await self.conn.commit()
+    
+    async def get_overdue_loans(self, current_time: int) -> List[dict]:
+        """获取所有逾期贷款"""
+        loans = []
+        async with self.conn.execute(
+            """SELECT id, user_id, principal, interest_rate, borrowed_at, due_at, loan_type
+               FROM bank_loans WHERE status = 'active' AND due_at < ?""",
+            (current_time,)
+        ) as cursor:
+            async for row in cursor:
+                loans.append({
+                    "id": row[0],
+                    "user_id": row[1],
+                    "principal": row[2],
+                    "interest_rate": row[3],
+                    "borrowed_at": row[4],
+                    "due_at": row[5],
+                    "loan_type": row[6]
+                })
+        return loans
+    
+    # ===== Phase 3: 银行交易流水 CRUD =====
+    
+    async def add_bank_transaction(self, user_id: str, trans_type: str, amount: int, 
+                                    balance_after: int, description: str, created_at: int):
+        """添加银行交易流水"""
+        await self.conn.execute(
+            """INSERT INTO bank_transactions (user_id, trans_type, amount, balance_after, description, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (user_id, trans_type, amount, balance_after, description, created_at)
+        )
+        await self.conn.commit()
+    
+    async def get_bank_transactions(self, user_id: str, limit: int = 20) -> List[dict]:
+        """获取用户银行交易流水"""
+        transactions = []
+        async with self.conn.execute(
+            """SELECT id, trans_type, amount, balance_after, description, created_at
+               FROM bank_transactions WHERE user_id = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (user_id, limit)
+        ) as cursor:
+            async for row in cursor:
+                transactions.append({
+                    "id": row[0],
+                    "trans_type": row[1],
+                    "amount": row[2],
+                    "balance_after": row[3],
+                    "description": row[4],
+                    "created_at": row[5]
+                })
+        return transactions
+    
+    async def get_deposit_ranking(self, limit: int = 10) -> List[dict]:
+        """获取存款排行榜"""
+        rankings = []
+        async with self.conn.execute(
+            """SELECT user_id, balance FROM bank_accounts
+               WHERE balance > 0
+               ORDER BY balance DESC LIMIT ?""",
+            (limit,)
+        ) as cursor:
+            async for row in cursor:
+                rankings.append({
+                    "user_id": row[0],
+                    "balance": row[1]
+                })
+        return rankings

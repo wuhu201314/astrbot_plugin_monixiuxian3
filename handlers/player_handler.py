@@ -215,8 +215,41 @@ class PlayerHandler:
             f"【宗门信息】\n"
             f"  所在宗门：{sect_name}\n"
             f"  宗门职位：{position_name}\n"
-            f"━━━━━━━━━━━━━━━"
         )
+        
+        # 获取贷款信息
+        loan = await self.db.ext.get_active_loan(player.user_id)
+        if loan:
+            now = int(time.time())
+            remaining_seconds = loan["due_at"] - now
+            remaining_days = remaining_seconds // 86400
+            remaining_hours = (remaining_seconds % 86400) // 3600
+            
+            days_borrowed = max(1, (now - loan["borrowed_at"]) // 86400)
+            interest = int(loan["principal"] * loan["interest_rate"] * days_borrowed)
+            total_due = loan["principal"] + interest
+            
+            loan_type_name = "突破贷款" if loan["loan_type"] == "breakthrough" else "普通贷款"
+            
+            if remaining_seconds <= 0:
+                time_str = "⚠️ 已逾期！"
+            elif remaining_days <= 0:
+                time_str = f"🔴 {remaining_hours}小时"
+            elif remaining_days <= 1:
+                time_str = f"🟠 {remaining_days}天{remaining_hours}小时"
+            else:
+                time_str = f"🟡 {remaining_days}天"
+            
+            reply_msg += (
+                f"\n"
+                f"【贷款信息】💰\n"
+                f"  类型：{loan_type_name}\n"
+                f"  应还：{total_due:,} 灵石\n"
+                f"  剩余：{time_str}\n"
+                f"  💀 逾期将被追杀致死！\n"
+            )
+        
+        reply_msg += "━━━━━━━━━━━━━━━"
         
         yield event.plain_result(reply_msg)
 

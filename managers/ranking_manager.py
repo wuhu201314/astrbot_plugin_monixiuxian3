@@ -150,6 +150,32 @@ class RankingManager:
         
         return True, msg
     
+    async def get_deposit_ranking(self, limit: int = 10) -> Tuple[bool, str]:
+        """
+        存款排行榜（银行存款）
+        
+        Args:
+            limit: 显示数量
+            
+        Returns:
+            (成功标志, 消息)
+        """
+        rankings = await self.db.ext.get_deposit_ranking(limit)
+        
+        if not rankings:
+            return False, "❌ 暂无存款数据！"
+        
+        msg = "📊 存款排行榜\n"
+        msg += "━━━━━━━━━━━━━━━\n"
+        
+        for idx, item in enumerate(rankings, 1):
+            player = await self.db.get_player_by_id(item["user_id"])
+            name = player.user_name if player and player.user_name else f"道友{item['user_id'][:6]}"
+            msg += f"{idx}. {name}\n"
+            msg += f"   存款：{item['balance']:,} 灵石\n\n"
+        
+        return True, msg
+    
     async def get_contribution_ranking(self, sect_id: int, limit: int = 10) -> Tuple[bool, str]:
         """
         宗门贡献度排行榜

@@ -85,6 +85,7 @@ CMD_RANK_LEVEL = "境界排行"
 CMD_RANK_POWER = "战力排行"
 CMD_RANK_WEALTH = "灵石排行"
 CMD_RANK_SECT = "宗门排行"
+CMD_RANK_DEPOSIT = "存款排行"
 
 # 战斗指令
 CMD_DUEL = "决斗"
@@ -117,6 +118,10 @@ CMD_BANK_INFO = "银行"
 CMD_BANK_DEPOSIT = "存灵石"
 CMD_BANK_WITHDRAW = "取灵石"
 CMD_BANK_INTEREST = "领取利息"
+CMD_BANK_LOAN = "贷款"
+CMD_BANK_REPAY = "还款"
+CMD_BANK_TRANSACTIONS = "银行流水"
+CMD_BANK_BREAKTHROUGH_LOAN = "突破贷款"
 
 # Phase 2: 悬赏令
 CMD_BOUNTY_LIST = "悬赏令"
@@ -699,6 +704,12 @@ class XiuXianPlugin(Star):
         async for r in self.ranking_handlers.handle_rank_sect(event):
             yield r
 
+    @filter.command(CMD_RANK_DEPOSIT, "查看存款排行榜")
+    @require_whitelist
+    async def handle_rank_deposit(self, event: AstrMessageEvent):
+        async for r in self.ranking_handlers.handle_rank_deposit(event):
+            yield r
+
     # ===== 战斗指令 =====
 
     @filter.command(CMD_DUEL, "与其他玩家决斗(消耗气血)")
@@ -813,6 +824,30 @@ class XiuXianPlugin(Star):
     @require_whitelist
     async def handle_bank_interest(self, event: AstrMessageEvent):
         async for r in self.bank_handlers.handle_claim_interest(event):
+            yield r
+
+    @filter.command(CMD_BANK_LOAN, "申请贷款")
+    @require_whitelist
+    async def handle_bank_loan(self, event: AstrMessageEvent, amount: int = 0):
+        async for r in self.bank_handlers.handle_loan(event, amount):
+            yield r
+
+    @filter.command(CMD_BANK_REPAY, "偿还贷款")
+    @require_whitelist
+    async def handle_bank_repay(self, event: AstrMessageEvent):
+        async for r in self.bank_handlers.handle_repay(event):
+            yield r
+
+    @filter.command(CMD_BANK_TRANSACTIONS, "查看银行流水")
+    @require_whitelist
+    async def handle_bank_transactions(self, event: AstrMessageEvent):
+        async for r in self.bank_handlers.handle_transactions(event):
+            yield r
+
+    @filter.command(CMD_BANK_BREAKTHROUGH_LOAN, "申请突破贷款")
+    @require_whitelist
+    async def handle_bank_breakthrough_loan(self, event: AstrMessageEvent, amount: int = 0):
+        async for r in self.bank_handlers.handle_breakthrough_loan(event, amount):
             yield r
 
     # ===== Phase 2: 悬赏令 =====
