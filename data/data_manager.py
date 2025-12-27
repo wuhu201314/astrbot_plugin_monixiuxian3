@@ -252,6 +252,7 @@ class DataBase:
         await self.conn.execute("DELETE FROM buff_info WHERE user_id = ?", (user_id,))
         await self.conn.execute("DELETE FROM impart_info WHERE user_id = ?", (user_id,))
         await self.conn.execute("DELETE FROM combat_cooldowns WHERE attacker_id = ? OR defender_id = ?", (user_id, user_id))
+        await self.conn.execute("DELETE FROM pending_gifts WHERE sender_id = ? OR receiver_id = ?", (user_id, user_id))
         await self.conn.execute("DELETE FROM players WHERE user_id = ?", (user_id,))
         await self.conn.commit()
 
@@ -305,20 +306,21 @@ class DataBase:
         )
         await self.conn.commit()
 
-    async def decrement_shop_item_stock(self, shop_id: str, item_name: str, quantity: int = 1) -> tuple[bool, int, int]:
+    async def decrement_shop_item_stock(self, shop_id: str, item_name: str, quantity: int = 1, external_transaction: bool = False) -> tuple[bool, int, int]:
         """尝试扣减指定商店物品的库存（原子操作，可批量）
 
         Args:
             shop_id: 商店ID
             item_name: 物品名称
             quantity: 扣减数量（默认1，最小1）
+            external_transaction: 是否由外部管理事务（True时不执行内部BEGIN/COMMIT/ROLLBACK）
 
         Returns:
             (是否成功, last_refresh_time, 扣减后的库存数量)
         """
-        # 防御性：至少扣减1
         quantity = max(1, int(quantity))
-        await self.conn.execute("BEGIN IMMEDIATE")
+        if not external_transaction:
+            await self.conn.execute("BEGIN IMMEDIATE")
         try:
             async with self.conn.execute(
                 "SELECT last_refresh_time, current_items FROM shop WHERE shop_id = ?",
@@ -327,7 +329,8 @@ class DataBase:
                 row = await cursor.fetchone()
 
             if not row:
-                await self.conn.rollback()
+                if not external_transaction:
+                    await self.conn.rollback()
                 return False, 0, 0
 
             last_refresh_time = row[0]
@@ -343,16 +346,19 @@ class DataBase:
                     break
 
             if target_index == -1:
-                await self.conn.rollback()
+                if not external_transaction:
+                    await self.conn.rollback()
                 return False, last_refresh_time, 0
 
             stock = current_items[target_index].get('stock', 0)
             if stock is None or stock <= 0:
-                await self.conn.rollback()
+                if not external_transaction:
+                    await self.conn.rollback()
                 return False, last_refresh_time, max(stock or 0, 0)
 
             if stock < quantity:
-                await self.conn.rollback()
+                if not external_transaction:
+                    await self.conn.rollback()
                 return False, last_refresh_time, stock
 
             new_stock = stock - quantity
@@ -363,10 +369,12 @@ class DataBase:
                 "UPDATE shop SET current_items = ?, last_refresh_time = ? WHERE shop_id = ?",
                 (items_json, last_refresh_time, shop_id)
             )
-            await self.conn.commit()
+            if not external_transaction:
+                await self.conn.commit()
             return True, last_refresh_time, new_stock
         except Exception:
-            await self.conn.rollback()
+            if not external_transaction:
+                await self.conn.rollback()
             raise
 
     async def increment_shop_item_stock(self, shop_id: str, item_name: str, quantity: int = 1):

@@ -88,47 +88,17 @@ class StorageRingHandler:
 
     @player_required
     async def handle_store_item(self, player: Player, event: AstrMessageEvent, args: str):
-        """存入物品到储物戒"""
-        if not args or args.strip() == "":
-            yield event.plain_result(
-                f"请指定要存入的物品\n"
-                f"用法：{CMD_STORE_ITEM} 物品名 [数量]\n"
-                f"示例：{CMD_STORE_ITEM} 精铁 5"
-            )
-            return
-
-        args = args.strip()
-        parts = args.rsplit(" ", 1)
-
-        # 解析物品名和数量
-        if len(parts) == 2 and parts[1].isdigit():
-            item_name = parts[0]
-            count = int(parts[1])
-        else:
-            item_name = args
-            count = 1
-
-        if count <= 0:
-            yield event.plain_result("数量必须大于0")
-            return
-
-        # 检查物品是否存在
-        item_exists = (
-            item_name in self.config_manager.items_data or
-            item_name in self.config_manager.weapons_data
+        """存入物品到储物戒 - 已禁用手动存入"""
+        yield event.plain_result(
+            "📦 储物戒说明：\n"
+            "物品会在以下情况自动存入储物戒：\n"
+            "  · 商店购买物品\n"
+            "  · 历练/秘境获得物品\n"
+            "  · Boss击杀掉落\n"
+            "  · 悬赏任务奖励\n"
+            "  · 卸下装备\n"
+            "\n⚠️ 不支持手动存入物品"
         )
-
-        if not item_exists:
-            yield event.plain_result(f"未找到物品：{item_name}")
-            return
-
-        # 存入物品
-        success, message = await self.storage_ring_manager.store_item(player, item_name, count)
-
-        if success:
-            yield event.plain_result(f"✅ {message}")
-        else:
-            yield event.plain_result(f"❌ {message}")
 
     @player_required
     async def handle_retrieve_item(self, player: Player, event: AstrMessageEvent, args: str):

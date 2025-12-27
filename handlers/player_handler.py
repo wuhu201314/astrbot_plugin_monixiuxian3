@@ -303,8 +303,11 @@ class PlayerHandler:
             yield event.plain_result("道友闭关时间不足1分钟，未获得修为。请继续闭关修炼。")
             return
 
-        # 闭关时长上限（24小时 = 1440分钟），超过部分不计算修为
-        MAX_CULTIVATION_MINUTES = 1440
+        # 闭关时长上限根据境界调整（基础24小时，每提升一个大境界增加6小时）
+        # level_index: 0-8练气, 9-17筑基, 18-26金丹, 27-35元婴, 36-44化神, 45-53炼虚, 54-62合体, 63-71大乘, 72+渡劫
+        base_minutes = 1440  # 24小时
+        realm_bonus = (player.level_index // 9) * 360  # 每个大境界增加6小时
+        MAX_CULTIVATION_MINUTES = base_minutes + realm_bonus
         effective_minutes = min(duration_minutes, MAX_CULTIVATION_MINUTES)
         exceeded_time = duration_minutes > MAX_CULTIVATION_MINUTES
 
@@ -354,8 +357,8 @@ class PlayerHandler:
         # 超时提示
         exceed_msg = ""
         if exceeded_time:
-            effective_hours = effective_minutes // 60
-            exceed_msg = f"\n⚠️ 闭关超过24小时，仅计算前{effective_hours}小时修为"
+            effective_hours = MAX_CULTIVATION_MINUTES // 60
+            exceed_msg = f"\n⚠️ 闭关超过{effective_hours}小时，仅计算前{effective_hours}小时修为"
 
         reply_msg = (
             "🌟 道友出关成功！\n"

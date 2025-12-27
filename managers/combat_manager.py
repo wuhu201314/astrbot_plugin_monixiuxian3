@@ -94,19 +94,22 @@ class CombatManager:
         return is_crit, damage
     
     @staticmethod
-    def apply_damage_reduction(damage: int, defense_buff: float = 0.0) -> int:
+    def apply_damage_reduction(damage: int, defense: int = 0) -> int:
         """
-        应用伤害减免
+        应用伤害减免（使用递减公式）
         
         Args:
             damage: 原始伤害
-            defense_buff: 防御加成百分比（0.0-1.0，例如0.3表示减免30%伤害）
+            defense: 防御力
             
         Returns:
             减免后的伤害
         """
-        reduction = max(0.1, 1.0 - defense_buff)  # 最低减免到原伤害的10%
-        return int(damage * reduction)
+        if defense <= 0:
+            return damage
+        reduction_rate = defense / (defense + 100)
+        final_damage = int(damage * (1 - reduction_rate))
+        return max(1, final_damage)
     
     @classmethod
     def player_vs_player(
@@ -148,7 +151,7 @@ class CombatManager:
             
             # 玩家1攻击
             is_crit1, damage1 = cls.calculate_turn_attack(player1.atk, player1.crit_rate)
-            damage1 = cls.apply_damage_reduction(damage1, player2.defense / 100)
+            damage1 = cls.apply_damage_reduction(damage1, player2.defense)
             player2.hp -= damage1
             
             if is_crit1:
@@ -162,7 +165,7 @@ class CombatManager:
             
             # 玩家2攻击
             is_crit2, damage2 = cls.calculate_turn_attack(player2.atk, player2.crit_rate)
-            damage2 = cls.apply_damage_reduction(damage2, player1.defense / 100)
+            damage2 = cls.apply_damage_reduction(damage2, player1.defense)
             player1.hp -= damage2
             
             if is_crit2:
@@ -240,7 +243,7 @@ class CombatManager:
             # 玩家攻击
             is_crit, damage = cls.calculate_turn_attack(player.atk, player.crit_rate)
             # Boss可能有减伤
-            damage = cls.apply_damage_reduction(damage, boss.defense / 100)
+            damage = cls.apply_damage_reduction(damage, boss.defense)
             boss.hp -= damage
             total_damage_dealt += damage
             
@@ -255,7 +258,7 @@ class CombatManager:
             
             # Boss攻击
             is_boss_crit, boss_damage = cls.calculate_turn_attack(boss.atk, 30)  # Boss固定30会心率
-            boss_damage = cls.apply_damage_reduction(boss_damage, player.defense / 100)
+            boss_damage = cls.apply_damage_reduction(boss_damage, player.defense)
             player.hp -= boss_damage
             
             if is_boss_crit:

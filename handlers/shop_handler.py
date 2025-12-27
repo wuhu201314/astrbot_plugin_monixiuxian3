@@ -159,21 +159,31 @@ class ShopHandler:
                 yield event.plain_result("装备信息不存在，无法完成购买。")
                 return
 
-        reserved, _, remaining = await self.db.decrement_shop_item_stock(pavilion_id, item_name, quantity)
-        if not reserved:
-            yield event.plain_result(f"【{item_name}】已售罄，请等待刷新。")
-            return
-
+        await self.db.conn.execute("BEGIN IMMEDIATE")
         try:
+            player = await self.db.get_player_by_id(event.get_sender_id())
+            if player.gold < total_price:
+                await self.db.conn.rollback()
+                yield event.plain_result(
+                    f"灵石不足！\n【{target_item['name']}】价格: {price} 灵石\n"
+                    f"购买数量: {quantity}\n需要灵石: {total_price}\n你的灵石: {player.gold}"
+                )
+                return
+
+            reserved, _, remaining = await self.db.decrement_shop_item_stock(pavilion_id, item_name, quantity, external_transaction=True)
+            if not reserved:
+                await self.db.conn.rollback()
+                yield event.plain_result(f"【{item_name}】已售罄，请等待刷新。")
+                return
+
             if item_type in ['weapon', 'armor', 'main_technique', 'technique']:
                 success, message = await self.equipment_manager.equip_item(player, parsed_item)
                 if not success:
-                    await self.db.increment_shop_item_stock(pavilion_id, item_name, quantity)
+                    await self.db.conn.rollback()
                     yield event.plain_result(message)
                     return
                 result_lines.append(message)
             elif item_type == 'accessory':
-                # 饰品存入储物戒
                 success, msg = await self.storage_ring_manager.store_item(player, target_item['name'], quantity)
                 if success:
                     result_lines.append(f"成功购买饰品【{target_item['name']}】x{quantity}，已存入储物戒。")
@@ -184,15 +194,13 @@ class ShopHandler:
                 await self.pill_manager.add_pill_to_inventory(player, target_item['name'], count=quantity)
                 result_lines.append(f"成功购买【{target_item['name']}】x{quantity}，已添加到背包。")
             elif item_type == 'legacy_pill':
-                # 旧系统丹药：直接应用效果
                 success, message = await self._apply_legacy_pill_effects(player, target_item, quantity)
                 if not success:
-                    await self.db.increment_shop_item_stock(pavilion_id, item_name, quantity)
+                    await self.db.conn.rollback()
                     yield event.plain_result(message)
                     return
                 result_lines.append(message)
             elif item_type == 'material':
-                # 材料类物品存入储物戒
                 success, msg = await self.storage_ring_manager.store_item(player, target_item['name'], quantity)
                 if success:
                     result_lines.append(f"成功购买材料【{target_item['name']}】x{quantity}，已存入储物戒。")
@@ -200,7 +208,6 @@ class ShopHandler:
                     result_lines.append(f"成功购买材料【{target_item['name']}】x{quantity}。")
                     result_lines.append(f"⚠️ 存入储物戒失败：{msg}")
             elif item_type == '功法':
-                # 功法类物品存入储物戒
                 success, msg = await self.storage_ring_manager.store_item(player, target_item['name'], quantity)
                 if success:
                     result_lines.append(f"成功购买功法【{target_item['name']}】x{quantity}，已存入储物戒。")
@@ -208,17 +215,19 @@ class ShopHandler:
                     result_lines.append(f"成功购买功法【{target_item['name']}】x{quantity}。")
                     result_lines.append(f"⚠️ 存入储物戒失败：{msg}")
             else:
-                await self.db.increment_shop_item_stock(pavilion_id, item_name, quantity)
+                await self.db.conn.rollback()
                 yield event.plain_result(f"未知的物品类型：{item_type}")
                 return
 
             player.gold -= total_price
             await self.db.update_player(player)
+            await self.db.conn.commit()
+            
             result_lines.append(f"花费灵石: {total_price}，剩余: {player.gold}")
             result_lines.append(f"剩余库存: {remaining}" if remaining > 0 else "该物品已售罄！")
             yield event.plain_result("\n".join(result_lines))
         except Exception as e:
-            await self.db.increment_shop_item_stock(pavilion_id, item_name, quantity)
+            await self.db.conn.rollback()
             logger.error(f"购买异常: {e}")
             raise
 

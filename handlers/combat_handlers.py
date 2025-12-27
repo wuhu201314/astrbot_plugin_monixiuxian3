@@ -116,9 +116,9 @@ class CombatHandlers:
             user_id=user_id,
             name=player.user_name if player.user_name else f"道友{user_id}",
             hp=hp,
-            max_hp=int(player.experience * (1 + hp_buff) // 2), 
+            max_hp=hp,
             mp=mp,
-            max_mp=int(player.experience * (1 + mp_buff)),
+            max_mp=mp,
             atk=final_atk,
             defense=equip_bonus["defense"],
             exp=player.experience

@@ -207,7 +207,7 @@ class XiuXianPlugin(Star):
         self.nickname_handler = NicknameHandler(self.db)  # Phase 1
         
         # Phase 2: 灵石银行和悬赏令
-        self.bank_mgr = BankManager(self.db)
+        self.bank_mgr = BankManager(self.db, self.config)
         self.bounty_mgr = BountyManager(self.db, self.storage_ring_mgr)
         self.bank_handlers = BankHandlers(self.db, self.bank_mgr)
         self.bounty_handlers = BountyHandlers(self.db, self.bounty_mgr)
@@ -300,8 +300,11 @@ class XiuXianPlugin(Star):
         logger.info("【修仙插件】已卸载。")
         
     async def _schedule_boss_spawn(self):
-        """Boss定时生成任务（支持持久化）"""
+        """Boss定时生成任务（支持持久化和指数退避）"""
         import time
+        
+        retry_count = 0
+        max_retry_delay = 3600
         
         while True:
             try:
@@ -317,9 +320,7 @@ class XiuXianPlugin(Star):
                     if remaining > 0:
                         logger.info(f"【修仙插件】Boss将在 {remaining} 秒后刷新")
                         await asyncio.sleep(remaining)
-                    # 如果已过期，立即生成
                 else:
-                    # 首次启动，等待完整间隔
                     next_spawn_time = current_time + interval
                     await self.db.ext.set_system_config("boss_next_spawn_time", str(next_spawn_time))
                     await asyncio.sleep(interval)
@@ -335,11 +336,17 @@ class XiuXianPlugin(Star):
                 next_spawn_time = int(time.time()) + interval
                 await self.db.ext.set_system_config("boss_next_spawn_time", str(next_spawn_time))
                 
+                # 成功后重置重试计数
+                retry_count = 0
+                
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Boss生成任务异常: {e}")
-                await asyncio.sleep(60)
+                retry_count += 1
+                delay = min(60 * (2 ** retry_count), max_retry_delay)
+                logger.info(f"【修仙插件】Boss任务将在 {delay} 秒后重试（第{retry_count}次）")
+                await asyncio.sleep(delay)
 
     async def _broadcast_boss_spawn(self, boss):
         """广播Boss刷新消息到所有白名单群聊"""
@@ -416,8 +423,11 @@ class XiuXianPlugin(Star):
             logger.error(f"【修仙插件】Boss击杀广播异常: {e}")
 
     async def _schedule_loan_check(self):
-        """贷款逾期检查定时任务（每小时检查一次）"""
+        """贷款逾期检查定时任务（每小时检查一次，支持指数退避）"""
         import time
+        
+        retry_count = 0
+        max_retry_delay = 3600
         
         while True:
             try:
@@ -433,12 +443,18 @@ class XiuXianPlugin(Star):
                     for loan_info in processed:
                         if loan_info.get("death"):
                             await self._broadcast_loan_death(loan_info)
+                
+                # 成功后重置重试计数
+                retry_count = 0
                             
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"贷款检查任务异常: {e}")
-                await asyncio.sleep(60)
+                retry_count += 1
+                delay = min(60 * (2 ** retry_count), max_retry_delay)
+                logger.info(f"【修仙插件】贷款检查任务将在 {delay} 秒后重试（第{retry_count}次）")
+                await asyncio.sleep(delay)
 
     async def _broadcast_loan_death(self, loan_info: dict):
         """广播贷款逾期玩家被追杀的消息"""
@@ -476,8 +492,11 @@ class XiuXianPlugin(Star):
             logger.error(f"【修仙插件】贷款追杀广播异常: {e}")
 
     async def _schedule_spirit_eye_spawn(self):
-        """灵眼生成定时任务（每2小时生成一个）"""
+        """灵眼生成定时任务（每2小时生成一个，支持指数退避）"""
         import time
+        
+        retry_count = 0
+        max_retry_delay = 3600
         
         while True:
             try:
@@ -495,7 +514,6 @@ class XiuXianPlugin(Star):
                         logger.info(f"【修仙插件】灵眼将在 {remaining} 秒后刷新")
                         await asyncio.sleep(remaining)
                 else:
-                    # 首次启动，等待完整间隔
                     next_spawn_time = current_time + spawn_interval
                     await self.db.ext.set_system_config("spirit_eye_next_spawn_time", str(next_spawn_time))
                     await asyncio.sleep(spawn_interval)
@@ -510,11 +528,17 @@ class XiuXianPlugin(Star):
                 next_spawn_time = int(time.time()) + spawn_interval
                 await self.db.ext.set_system_config("spirit_eye_next_spawn_time", str(next_spawn_time))
                 
+                # 成功后重置重试计数
+                retry_count = 0
+                
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"灵眼生成任务异常: {e}")
-                await asyncio.sleep(60)
+                retry_count += 1
+                delay = min(60 * (2 ** retry_count), max_retry_delay)
+                logger.info(f"【修仙插件】灵眼任务将在 {delay} 秒后重试（第{retry_count}次）")
+                await asyncio.sleep(delay)
 
     async def _schedule_bounty_check(self):
         """悬赏过期检查定时任务（每30分钟检查一次）"""

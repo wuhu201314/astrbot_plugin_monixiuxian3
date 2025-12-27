@@ -73,111 +73,109 @@ class StorageRingManager:
         return True, ""
 
     async def store_item(self, player: Player, item_name: str, count: int = 1, silent: bool = False) -> Tuple[bool, str]:
-        """将物品存入储物戒
-
-        Args:
-            player: 玩家对象
-            item_name: 物品名称
-            count: 数量
-            silent: 是否静默模式（不返回详细消息）
-
-        Returns:
-            (是否成功, 消息)
-        """
-        # 检查物品是否可以存入
+        """将物品存入储物戒（带事务保护）"""
         can_store, reason = self.can_store_item(item_name)
         if not can_store:
             return False, reason
 
-        items = player.get_storage_ring_items()
+        await self.db.conn.execute("BEGIN IMMEDIATE")
+        try:
+            player = await self.db.get_player_by_id(player.user_id)
+            items = player.get_storage_ring_items()
 
-        # 如果物品已存在，可以直接堆叠，不占用新格子
-        if item_name not in items:
-            # 新物品需要检查是否有空格子
-            available = self.get_available_slots(player)
-            if available <= 0:
-                capacity = self.get_ring_capacity(player.storage_ring)
-                return False, f"储物戒已满！({capacity}/{capacity}格)"
+            if item_name not in items:
+                available = self.get_available_slots(player)
+                if available <= 0:
+                    await self.db.conn.rollback()
+                    capacity = self.get_ring_capacity(player.storage_ring)
+                    return False, f"储物戒已满！({capacity}/{capacity}格)"
 
-        # 存入物品
-        items[item_name] = items.get(item_name, 0) + count
-        player.set_storage_ring_items(items)
-        await self.db.update_player(player)
+            items[item_name] = items.get(item_name, 0) + count
+            player.set_storage_ring_items(items)
+            await self.db.update_player(player)
+            await self.db.conn.commit()
 
-        capacity = self.get_ring_capacity(player.storage_ring)
-        used = self.get_used_slots(player)
+            capacity = self.get_ring_capacity(player.storage_ring)
+            used = self.get_used_slots(player)
 
-        if silent:
-            return True, ""
+            if silent:
+                return True, ""
 
-        # 检查是否需要空间警告
-        warning = self.get_space_warning(player)
-        msg = f"已将【{item_name}】x{count} 存入储物戒（{used}/{capacity}格）"
-        if warning:
-            msg += f"\n{warning}"
+            warning = self.get_space_warning(player)
+            msg = f"已将【{item_name}】x{count} 存入储物戒（{used}/{capacity}格）"
+            if warning:
+                msg += f"\n{warning}"
 
-        return True, msg
+            return True, msg
+        except Exception:
+            await self.db.conn.rollback()
+            raise
 
     async def retrieve_item(self, player: Player, item_name: str, count: int = 1) -> Tuple[bool, str]:
-        """从储物戒取出物品"""
-        items = player.get_storage_ring_items()
+        """从储物戒取出物品（带事务保护）"""
+        await self.db.conn.execute("BEGIN IMMEDIATE")
+        try:
+            player = await self.db.get_player_by_id(player.user_id)
+            items = player.get_storage_ring_items()
 
-        # 检查物品是否存在
-        if item_name not in items:
-            return False, f"储物戒中没有【{item_name}】"
+            if item_name not in items:
+                await self.db.conn.rollback()
+                return False, f"储物戒中没有【{item_name}】"
 
-        current_count = items[item_name]
-        if count > current_count:
-            return False, f"储物戒中【{item_name}】数量不足（当前：{current_count}个）"
+            current_count = items[item_name]
+            if count > current_count:
+                await self.db.conn.rollback()
+                return False, f"储物戒中【{item_name}】数量不足（当前：{current_count}个）"
 
-        # 取出物品
-        if count >= current_count:
-            del items[item_name]
-        else:
-            items[item_name] = current_count - count
+            if count >= current_count:
+                del items[item_name]
+            else:
+                items[item_name] = current_count - count
 
-        player.set_storage_ring_items(items)
-        await self.db.update_player(player)
+            player.set_storage_ring_items(items)
+            await self.db.update_player(player)
+            await self.db.conn.commit()
 
-        capacity = self.get_ring_capacity(player.storage_ring)
-        used = self.get_used_slots(player)
-        return True, f"已从储物戒取出【{item_name}】x{count}（{used}/{capacity}格）"
+            capacity = self.get_ring_capacity(player.storage_ring)
+            used = self.get_used_slots(player)
+            return True, f"已从储物戒取出【{item_name}】x{count}（{used}/{capacity}格）"
+        except Exception:
+            await self.db.conn.rollback()
+            raise
 
     async def discard_item(self, player: Player, item_name: str, count: int = 1) -> Tuple[bool, str]:
-        """丢弃储物戒中的物品
+        """丢弃储物戒中的物品（带事务保护）"""
+        await self.db.conn.execute("BEGIN IMMEDIATE")
+        try:
+            player = await self.db.get_player_by_id(player.user_id)
+            items = player.get_storage_ring_items()
 
-        Args:
-            player: 玩家对象
-            item_name: 物品名称
-            count: 数量
+            if item_name not in items:
+                await self.db.conn.rollback()
+                return False, f"储物戒中没有【{item_name}】"
 
-        Returns:
-            (是否成功, 消息)
-        """
-        items = player.get_storage_ring_items()
+            current_count = items[item_name]
+            if count > current_count:
+                await self.db.conn.rollback()
+                return False, f"储物戒中【{item_name}】数量不足（当前：{current_count}个）"
 
-        # 检查物品是否存在
-        if item_name not in items:
-            return False, f"储物戒中没有【{item_name}】"
+            if count >= current_count:
+                del items[item_name]
+                discard_count = current_count
+            else:
+                items[item_name] = current_count - count
+                discard_count = count
 
-        current_count = items[item_name]
-        if count > current_count:
-            return False, f"储物戒中【{item_name}】数量不足（当前：{current_count}个）"
+            player.set_storage_ring_items(items)
+            await self.db.update_player(player)
+            await self.db.conn.commit()
 
-        # 丢弃物品
-        if count >= current_count:
-            del items[item_name]
-            discard_count = current_count
-        else:
-            items[item_name] = current_count - count
-            discard_count = count
-
-        player.set_storage_ring_items(items)
-        await self.db.update_player(player)
-
-        capacity = self.get_ring_capacity(player.storage_ring)
-        used = self.get_used_slots(player)
-        return True, f"已丢弃【{item_name}】x{discard_count}（{used}/{capacity}格）"
+            capacity = self.get_ring_capacity(player.storage_ring)
+            used = self.get_used_slots(player)
+            return True, f"已丢弃【{item_name}】x{discard_count}（{used}/{capacity}格）"
+        except Exception:
+            await self.db.conn.rollback()
+            raise
 
     def check_upgrade_requirement(self, player: Player, new_ring_name: str) -> Tuple[bool, str]:
         """检查玩家是否满足储物戒升级要求"""

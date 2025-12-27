@@ -1,32 +1,41 @@
 # managers/bank_manager.py
 """灵石银行系统管理器 - 包含存取款、贷款、流水记录功能"""
 import time
+from decimal import Decimal, ROUND_DOWN
 from typing import Tuple, List, Optional
 from ..data import DataBase
 from ..models import Player
 
 __all__ = ["BankManager"]
 
-# 银行配置
-DAILY_INTEREST_RATE = 0.001  # 存款日利率 0.1%
-MAX_DEPOSIT = 10000000  # 最大存款上限 1000万
-
-# 贷款配置
-LOAN_INTEREST_RATE = 0.005  # 贷款日利率 0.5%
-LOAN_DURATION_DAYS = 7  # 贷款期限 7天
-MAX_LOAN_AMOUNT = 1000000  # 最大贷款额度 100万
-MIN_LOAN_AMOUNT = 1000  # 最小贷款额度 1000
-
-# 突破贷款配置
-BREAKTHROUGH_LOAN_RATE = 0.008  # 突破贷款日利率 0.8%（更高风险）
-BREAKTHROUGH_LOAN_DURATION = 3  # 突破贷款期限 3天
+# 银行配置默认值
+DEFAULT_DAILY_INTEREST_RATE = 0.001  # 存款日利率 0.1%
+DEFAULT_MAX_DEPOSIT = 10000000  # 最大存款上限 1000万
+DEFAULT_LOAN_INTEREST_RATE = 0.005  # 贷款日利率 0.5%
+DEFAULT_LOAN_DURATION_DAYS = 7  # 贷款期限 7天
+DEFAULT_MAX_LOAN_AMOUNT = 1000000  # 最大贷款额度 100万
+DEFAULT_MIN_LOAN_AMOUNT = 1000  # 最小贷款额度 1000
+DEFAULT_BREAKTHROUGH_LOAN_RATE = 0.008  # 突破贷款日利率 0.8%（更高风险）
+DEFAULT_BREAKTHROUGH_LOAN_DURATION = 3  # 突破贷款期限 3天
 
 
 class BankManager:
     """灵石银行管理器"""
     
-    def __init__(self, db: DataBase):
+    def __init__(self, db: DataBase, config: dict = None):
         self.db = db
+        self.config = config or {}
+        
+        # 从配置读取，使用默认值作为后备
+        bank_config = self.config.get("BANK", {})
+        self.daily_interest_rate = bank_config.get("DAILY_INTEREST_RATE", DEFAULT_DAILY_INTEREST_RATE)
+        self.max_deposit = bank_config.get("MAX_DEPOSIT", DEFAULT_MAX_DEPOSIT)
+        self.loan_interest_rate = bank_config.get("LOAN_INTEREST_RATE", DEFAULT_LOAN_INTEREST_RATE)
+        self.loan_duration_days = bank_config.get("LOAN_DURATION_DAYS", DEFAULT_LOAN_DURATION_DAYS)
+        self.max_loan_amount = bank_config.get("MAX_LOAN_AMOUNT", DEFAULT_MAX_LOAN_AMOUNT)
+        self.min_loan_amount = bank_config.get("MIN_LOAN_AMOUNT", DEFAULT_MIN_LOAN_AMOUNT)
+        self.breakthrough_loan_rate = bank_config.get("BREAKTHROUGH_LOAN_RATE", DEFAULT_BREAKTHROUGH_LOAN_RATE)
+        self.breakthrough_loan_duration = bank_config.get("BREAKTHROUGH_LOAN_DURATION", DEFAULT_BREAKTHROUGH_LOAN_DURATION)
     
     # ===== 存款相关 =====
     
@@ -57,7 +66,7 @@ class BankManager:
         return bank_info
     
     def _calculate_interest(self, balance: int, last_time: int) -> int:
-        """计算待领利息"""
+        """计算待领利息（使用Decimal精确计算）"""
         if balance <= 0 or last_time <= 0:
             return 0
         
@@ -67,9 +76,16 @@ class BankManager:
         if days_passed < 1:
             return 0
         
-        # 复利计算
-        interest = int(balance * ((1 + DAILY_INTEREST_RATE) ** days_passed - 1))
-        return interest
+        # 使用Decimal进行精确复利计算
+        balance_d = Decimal(str(balance))
+        rate_d = Decimal(str(self.daily_interest_rate))
+        
+        # 复利计算: balance * ((1 + rate) ^ days - 1)
+        compound = (1 + rate_d) ** days_passed - 1
+        interest = balance_d * compound
+        
+        # 向下取整返回
+        return int(interest.quantize(Decimal('1'), rounding=ROUND_DOWN))
     
     async def deposit(self, player: Player, amount: int) -> Tuple[bool, str]:
         """存入灵石"""
@@ -86,9 +102,9 @@ class BankManager:
             bank_data = await self.db.ext.get_bank_account(player.user_id)
             current_balance = bank_data["balance"] if bank_data else 0
             
-            if current_balance + amount > MAX_DEPOSIT:
+            if current_balance + amount > self.max_deposit:
                 await self.db.conn.rollback()
-                return False, f"存款上限为 {MAX_DEPOSIT:,} 灵石，当前余额 {current_balance:,}。"
+                return False, f"存款上限为 {self.max_deposit:,} 灵石，当前余额 {current_balance:,}。"
             
             player.gold -= amount
             await self.db.update_player(player)
@@ -200,11 +216,11 @@ class BankManager:
             amount: 贷款金额
             loan_type: 贷款类型 (normal/breakthrough)
         """
-        if amount < MIN_LOAN_AMOUNT:
-            return False, f"最小贷款金额为 {MIN_LOAN_AMOUNT:,} 灵石。"
+        if amount < self.min_loan_amount:
+            return False, f"最小贷款金额为 {self.min_loan_amount:,} 灵石。"
         
-        if amount > MAX_LOAN_AMOUNT:
-            return False, f"最大贷款金额为 {MAX_LOAN_AMOUNT:,} 灵石。"
+        if amount > self.max_loan_amount:
+            return False, f"最大贷款金额为 {self.max_loan_amount:,} 灵石。"
         
         await self.db.conn.execute("BEGIN IMMEDIATE")
         try:
@@ -215,12 +231,12 @@ class BankManager:
                 return False, "你已有未还清的贷款，请先还款后再申请新贷款。"
             
             if loan_type == "breakthrough":
-                interest_rate = BREAKTHROUGH_LOAN_RATE
-                duration_days = BREAKTHROUGH_LOAN_DURATION
+                interest_rate = self.breakthrough_loan_rate
+                duration_days = self.breakthrough_loan_duration
                 type_name = "突破贷款"
             else:
-                interest_rate = LOAN_INTEREST_RATE
-                duration_days = LOAN_DURATION_DAYS
+                interest_rate = self.loan_interest_rate
+                duration_days = self.loan_duration_days
                 type_name = "普通贷款"
             
             now = int(time.time())

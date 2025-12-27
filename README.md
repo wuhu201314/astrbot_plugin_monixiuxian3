@@ -4,7 +4,7 @@
   <img src="logo.png" alt="模拟修仙" width="200">
 </p>
 
-> **版本:** v2.8.2  
+> **版本:** v2.9.0  
 > **许可证:** AGPL-3.0  
 > **作者:** xiaojuwa  
 > **基于:** [nonebot_plugin_xiuxian_2](https://github.com/xiuxian-2/nonebot_plugin_xiuxian_2) (部分借鉴与重构)
@@ -280,6 +280,39 @@ astrbot_plugin_monixiuxian2/
 ---
 
 ## 📝 更新日志
+
+### v2.9.0 - 安全性与稳定性大修复
+
+**🔴 高严重性修复 (P0)**
+| 问题 | 修复位置 | 说明 |
+|------|----------|------|
+| 储物戒物品来源验证漏洞 | storage_ring_handler.py | 禁用手动存入，物品只能通过系统自动存入 |
+| HP/MP计算不一致 | combat_handlers.py | 统一使用 CombatManager.calculate_hp_mp 返回值 |
+| 贷款逾期检查并发风险 | utils.py | 添加事务保护防止重复删除玩家 |
+| 级联删除不完整 | data_manager.py | 添加 pending_gifts 表的级联删除 |
+| 储物戒操作无事务保护 | storage_ring_manager.py | store/retrieve/discard 添加事务保护 |
+
+**🟡 中严重性修复 (P1)**
+| 问题 | 修复位置 | 说明 |
+|------|----------|------|
+| 防御减伤公式不合理 | combat_manager.py | 改用递减公式 defense/(defense+100) |
+| 银行利息精度问题 | bank_manager.py | 使用 Decimal 精确复利计算 |
+| JSON解析异常处理宽泛 | models.py | 改为 except json.JSONDecodeError |
+| 定时任务异常恢复不健壮 | main.py | 添加指数退避重试机制 |
+| 购买流程事务不完整 | shop_handler.py | 整个购买流程包装在单一事务中 |
+
+**🟢 低严重性修复 (P2)**
+| 问题 | 修复位置 | 说明 |
+|------|----------|------|
+| 闭关上限固定24小时 | player_handler.py | 根据境界动态调整（24h-72h） |
+| 银行配置硬编码 | bank_manager.py | 配置外部化，支持自定义利率等参数 |
+
+**✨ 改进**
+- 防御公式优化：100防御=50%减伤，200防御=66%减伤，更合理的递减曲线
+- 闭关时长：练气24h → 筑基30h → 金丹36h → ... → 渡劫72h
+- 银行配置可在 config 中自定义：利率、存款上限、贷款额度等
+
+---
 
 ### v2.7.1 - Bug修复与系统完善
 
