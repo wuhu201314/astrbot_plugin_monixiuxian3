@@ -213,19 +213,29 @@ class RiftManager:
         # 5. 物品掉落（根据玩家境界确定秘境等级）
         dropped_items = []
         item_msg = ""
-        if self.storage_ring_manager:
-            rift_level = self._get_rift_level_by_player(player)
-            dropped_items = await self._roll_rift_drops(player, rift_level, event["item_chance"])
-            if dropped_items:
-                item_lines = []
-                for item_name, count in dropped_items:
+        rift_level = self._get_rift_level_by_player(player)
+        dropped_items = await self._roll_rift_drops(player, rift_level, event["item_chance"])
+        if dropped_items:
+            item_lines = []
+            for item_name, count in dropped_items:
+                # 检查是否为丹药，丹药存入丹药背包，其他存入储物戒
+                is_pill = self._is_pill_item(item_name)
+                if is_pill:
+                    # 存入丹药背包
+                    inventory = player.get_pills_inventory()
+                    inventory[item_name] = inventory.get(item_name, 0) + count
+                    player.set_pills_inventory(inventory)
+                    item_lines.append(f"  · {item_name} x{count}（丹药背包）")
+                elif self.storage_ring_manager:
                     success, _ = await self.storage_ring_manager.store_item(player, item_name, count, silent=True)
                     if success:
                         item_lines.append(f"  · {item_name} x{count}")
                     else:
                         item_lines.append(f"  · {item_name} x{count}（储物戒已满，丢失）")
-                if item_lines:
-                    item_msg = "\n\n📦 获得物品：\n" + "\n".join(item_lines)
+                else:
+                    item_lines.append(f"  · {item_name} x{count}（无法存储）")
+            if item_lines:
+                item_msg = "\n\n📦 获得物品：\n" + "\n".join(item_lines)
         
         # 6. 应用奖励
         player.experience += exp_reward
@@ -278,6 +288,12 @@ class RiftManager:
         await self.db.ext.set_user_free(user_id)
         
         return True, "✅ 你已退出秘境，本次探索未获得任何奖励。"
+    
+    def _is_pill_item(self, item_name: str) -> bool:
+        """检查物品是否为丹药"""
+        if self.config_manager and hasattr(self.config_manager, 'is_pill'):
+            return self.config_manager.is_pill(item_name)
+        return False
     
     def _get_rift_level_by_player(self, player: Player) -> int:
         """根据玩家境界确定秘境等级"""

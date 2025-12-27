@@ -117,6 +117,9 @@ class ConfigManager:
         self.boss_config = self._load_config_with_default(config_dir / "boss_config.json", BOSS_CONFIG)
         self.rift_config = self._load_config_with_default(config_dir / "rift_config.json", RIFT_CONFIG)
         self.alchemy_config = self._load_config_with_default(config_dir / "alchemy_config.json", ALCHEMY_CONFIG)
+        self.alchemy_recipes = self._load_items_data(config_dir / "alchemy_recipes.json")
+        
+        self._pill_names_cache = None
 
         logger.info(
             f"配置管理器初始化完成，"
@@ -124,3 +127,39 @@ class ConfigManager:
             f"{len(self.body_level_data)} 个体修境界配置，"
             f"以及新系统配置 (宗门/Boss/秘境/炼丹)"
         )
+    
+    def is_pill(self, item_name: str) -> bool:
+        """检查物品是否为丹药类型（统一的丹药判断方法）"""
+        if item_name in self.pills_data:
+            return True
+        if item_name in self.exp_pills_data:
+            return True
+        if item_name in self.utility_pills_data:
+            return True
+        
+        item_config = self.items_data.get(item_name)
+        if item_config and item_config.get("type") == "丹药":
+            return True
+        
+        return False
+    
+    def get_all_pill_names(self) -> set:
+        """获取所有注册的丹药名称"""
+        if self._pill_names_cache is not None:
+            return self._pill_names_cache
+        
+        pill_names = set()
+        pill_names.update(self.pills_data.keys())
+        pill_names.update(self.exp_pills_data.keys())
+        pill_names.update(self.utility_pills_data.keys())
+        
+        for name, item in self.items_data.items():
+            if isinstance(item, dict) and item.get("type") == "丹药":
+                pill_names.add(name)
+        
+        self._pill_names_cache = pill_names
+        return pill_names
+    
+    def invalidate_cache(self):
+        """清除缓存，在配置重载时调用"""
+        self._pill_names_cache = None

@@ -17,85 +17,33 @@ if TYPE_CHECKING:
 class AlchemyManager:
     """炼丹系统管理器（简化版）"""
     
-    # 丹药配方（简化版本）
-    PILL_RECIPES = {
-        1: {
-            "id": 1,
-            "name": "聚气丹",
-            "level_required": 0,
-            "materials": {"灵草": 3, "灵石": 100},
-            "success_rate": 80,
-            "effect": {"type": "exp", "value": 1000},
-            "desc": "增加1000修为"
-        },
-        2: {
-            "id": 2,
-            "name": "筑基丹",
-            "level_required": 2,
-            "materials": {"灵草": 5, "灵石": 500},
-            "success_rate": 60,
-            "effect": {"type": "exp", "value": 5000},
-            "desc": "增加5000修为"
-        },
-        3: {
-            "id": 3,
-            "name": "金丹",
-            "level_required": 5,
-            "materials": {"灵草": 10, "灵石": 2000},
-            "success_rate": 40,
-            "effect": {"type": "exp", "value": 20000},
-            "desc": "增加20000修为"
-        },
-        4: {
-            "id": 4,
-            "name": "回春丹",
-            "level_required": 1,
-            "materials": {"灵草": 2, "灵石": 200},
-            "success_rate": 70,
-            "effect": {"type": "hp_restore", "value": 50},
-            "desc": "恢复50%气血"
-        },
-        5: {
-            "id": 5,
-            "name": "聚灵丹",
-            "level_required": 1,
-            "materials": {"灵草": 2, "灵石": 200},
-            "success_rate": 70,
-            "effect": {"type": "mp_restore", "value": 50},
-            "desc": "恢复50%真元"
-        },
-    }
-    
     def __init__(self, db: DataBase, config_manager: "ConfigManager" = None, storage_ring_manager: "StorageRingManager" = None):
         self.db = db
         self.config_manager = config_manager
         self.storage_ring_manager = storage_ring_manager
         self.config = config_manager.alchemy_config if config_manager else {}
         
-        # 加载配方（处理key类型和字段兼容性）
-        raw_recipes = self.config.get("recipes", self.PILL_RECIPES)
+        raw_recipes = {}
+        if config_manager and hasattr(config_manager, 'alchemy_recipes') and config_manager.alchemy_recipes:
+            raw_recipes = config_manager.alchemy_recipes
+        
         self.recipes = {}
-        for k, v in raw_recipes.items():
-            try:
-                recipe_id = int(k)
-                # 标准化配方字段（兼容旧格式）
-                self.recipes[recipe_id] = self._normalize_recipe(recipe_id, v)
-            except ValueError:
-                continue
+        for recipe in raw_recipes.values():
+            if isinstance(recipe, dict) and recipe.get("id"):
+                recipe_id = int(recipe["id"])
+                self.recipes[recipe_id] = self._normalize_recipe(recipe_id, recipe)
     
     def _normalize_recipe(self, recipe_id: int, recipe: Dict) -> Dict:
         """标准化配方字段，兼容不同格式的配置"""
-        # 默认效果映射
-        default_effects = {
-            "聚气丹": {"type": "exp", "value": 1000, "desc": "增加1000修为"},
-            "筑基丹": {"type": "exp", "value": 5000, "desc": "增加5000修为"},
-            "金丹": {"type": "exp", "value": 20000, "desc": "增加20000修为"},
-            "回春丹": {"type": "hp_restore", "value": 50, "desc": "恢复50%气血"},
-            "聚灵丹": {"type": "mp_restore", "value": 50, "desc": "恢复50%真元"},
-        }
-        
         name = recipe.get("name", f"丹药{recipe_id}")
-        effect_info = default_effects.get(name, {"type": "exp", "value": 1000, "desc": "增加修为"})
+        
+        desc = recipe.get("desc", None)
+        if not desc and self.config_manager:
+            pill_config = self._get_pill_config_by_name(name)
+            if pill_config:
+                desc = self._generate_pill_desc(pill_config)
+        if not desc:
+            desc = "丹药效果"
         
         return {
             "id": recipe.get("id", recipe_id),
@@ -103,9 +51,64 @@ class AlchemyManager:
             "level_required": recipe.get("level_required", recipe.get("level", 0)),
             "materials": recipe.get("materials", recipe.get("cost", {})),
             "success_rate": recipe.get("success_rate", recipe.get("success", 50)),
-            "effect": recipe.get("effect", {"type": effect_info["type"], "value": effect_info["value"]}),
-            "desc": recipe.get("desc", effect_info["desc"])
+            "desc": desc
         }
+    
+    def _generate_pill_desc(self, pill_config: Dict) -> str:
+        """根据丹药配置生成描述"""
+        rank = pill_config.get("rank", "")
+        
+        if pill_config.get("exp_gain"):
+            return f"增加{pill_config['exp_gain']}修为（{rank}修为丹）"
+        
+        if pill_config.get("breakthrough_bonus"):
+            bonus = int(pill_config["breakthrough_bonus"] * 100)
+            return f"提升{bonus}%突破成功率（{rank}破境丹）"
+        
+        if pill_config.get("description"):
+            return pill_config["description"]
+        
+        effect = pill_config.get("effect", {})
+        if effect:
+            effects = []
+            if effect.get("add_hp"):
+                effects.append(f"恢复{effect['add_hp']}气血")
+            if effect.get("add_experience"):
+                effects.append(f"增加{effect['add_experience']}修为")
+            if effect.get("add_breakthrough_bonus"):
+                bonus = int(effect["add_breakthrough_bonus"] * 100)
+                effects.append(f"提升{bonus}%突破率")
+            if effects:
+                return f"{'，'.join(effects)}（{rank}）"
+        
+        return f"{rank}丹药"
+    
+    def _get_pill_config_by_name(self, name: str) -> Optional[Dict]:
+        """根据丹药名称从配置中获取丹药信息"""
+        if not self.config_manager:
+            return None
+        
+        if hasattr(self.config_manager, 'exp_pills_data'):
+            pill = self.config_manager.exp_pills_data.get(name)
+            if pill:
+                return pill
+        
+        if hasattr(self.config_manager, 'utility_pills_data'):
+            pill = self.config_manager.utility_pills_data.get(name)
+            if pill:
+                return pill
+        
+        if hasattr(self.config_manager, 'pills_data'):
+            pill = self.config_manager.pills_data.get(name)
+            if pill:
+                return pill
+        
+        if hasattr(self.config_manager, 'items_data'):
+            item = self.config_manager.items_data.get(name)
+            if item and item.get("type") == "丹药":
+                return item
+        
+        return None
     
     async def get_available_recipes(self, user_id: str) -> Tuple[bool, str]:
         """
@@ -227,32 +230,13 @@ class AlchemyManager:
         is_success = roll <= final_success_rate
         
         if is_success:
-            # 炼制成功
-            effect_type = recipe["effect"]["type"]
-            effect_value = recipe["effect"]["value"]
+            # 炼制成功 - 丹药存入丹药背包
+            pill_name = recipe["name"]
             
-            # 应用效果（简化版本，直接给修为或恢复HP/MP）
-            if effect_type == "exp":
-                player.experience += effect_value
-                effect_msg = f"修为 +{effect_value:,}"
-            elif effect_type == "hp_restore":
-                if player.hp > 0:
-                    max_hp = player.experience // 2
-                    restore_amount = int(max_hp * effect_value / 100)
-                    player.hp = min(max_hp, player.hp + restore_amount)
-                    effect_msg = f"气血恢复 +{restore_amount}"
-                else:
-                    effect_msg = "气血已恢复"
-            elif effect_type == "mp_restore":
-                if player.mp > 0:
-                    max_mp = player.experience
-                    restore_amount = int(max_mp * effect_value / 100)
-                    player.mp = min(max_mp, player.mp + restore_amount)
-                    effect_msg = f"真元恢复 +{restore_amount}"
-                else:
-                    effect_msg = "真元已恢复"
-            else:
-                effect_msg = "未知效果"
+            # 将丹药存入丹药背包
+            inventory = player.get_pills_inventory()
+            inventory[pill_name] = inventory.get(pill_name, 0) + 1
+            player.set_pills_inventory(inventory)
             
             await self.db.update_player(player)
             
@@ -267,18 +251,19 @@ class AlchemyManager:
 🎉 炼丹成功！
 ━━━━━━━━━━━━━━━
 
-你成功炼制了【{recipe['name']}】！
-
-{effect_msg}
+你成功炼制了【{pill_name}】！
+丹药已存入丹药背包
 
 消耗：{cost_str}
 成功率：{final_success_rate}%
+
+💡 使用 /服用丹药 {pill_name} 可服用此丹药
+💡 使用 /丹药背包 查看所有丹药
             """.strip()
             
             result_data = {
                 "success": True,
-                "pill_name": recipe["name"],
-                "effect": effect_msg,
+                "pill_name": pill_name,
                 "cost": required_gold,
                 "materials_consumed": consumed_materials
             }
@@ -314,21 +299,3 @@ class AlchemyManager:
             }
         
         return True, msg, result_data
-    
-    async def use_pill(
-        self,
-        user_id: str,
-        pill_name: str
-    ) -> Tuple[bool, str]:
-        """
-        使用丹药（简化版本，实际应该从背包系统中使用）
-        
-        Args:
-            user_id: 用户ID
-            pill_name: 丹药名称
-            
-        Returns:
-            (成功标志, 消息)
-        """
-        # 这是一个占位方法，实际应该与背包系统集成
-        return False, "❌ 此功能尚未完全实现，请先炼制丹药！"

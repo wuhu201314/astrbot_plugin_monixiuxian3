@@ -1,6 +1,7 @@
 # handlers/storage_ring_handler.py
 
 from astrbot.api.event import AstrMessageEvent
+from astrbot.api.all import At, Plain
 from ..data import DataBase
 from ..core import StorageRingManager
 from ..config_manager import ConfigManager
@@ -201,37 +202,40 @@ class StorageRingHandler:
     @player_required
     async def handle_gift_item(self, player: Player, event: AstrMessageEvent, args: str):
         """赠予物品给其他玩家"""
-        from astrbot.api.message_components import At, Plain
-
         target_id = None
         item_name = None
         count = 1
 
-        # 从消息链中提取 At 组件和文本内容
+        # 从消息链中提取 At 组件和 Plain 文本
         text_parts = []
         message_chain = event.message_obj.message if hasattr(event, 'message_obj') and event.message_obj else []
-
+        
         for comp in message_chain:
             if isinstance(comp, At):
-                # 获取被@的用户ID
+                # 兼容多种At属性名
                 if target_id is None:
-                    target_id = str(comp.qq) if hasattr(comp, 'qq') else str(comp.target) if hasattr(comp, 'target') else None
+                    if hasattr(comp, 'qq'):
+                        target_id = str(comp.qq)
+                    elif hasattr(comp, 'target'):
+                        target_id = str(comp.target)
+                    elif hasattr(comp, 'uin'):
+                        target_id = str(comp.uin)
             elif isinstance(comp, Plain):
                 text_parts.append(comp.text)
 
         # 合并文本内容并移除命令前缀
         text_content = "".join(text_parts).strip()
-        for prefix in ["#赠予", "赠予"]:
+        for prefix in ["#赠予", "/赠予", "赠予"]:
             if text_content.startswith(prefix):
                 text_content = text_content[len(prefix):].strip()
                 break
-
-        # 如果没有从At组件获取到target_id，尝试从文本解析
+        
+        # 如果没有从At组件获取到target_id，尝试从文本解析纯数字QQ号
         if not target_id and text_content:
             parts = text_content.split(None, 1)
             if len(parts) >= 1:
                 potential_id = parts[0].lstrip('@')
-                if potential_id.isdigit():
+                if potential_id.isdigit() and len(potential_id) >= 5:
                     target_id = potential_id
                     text_content = parts[1].strip() if len(parts) > 1 else ""
 

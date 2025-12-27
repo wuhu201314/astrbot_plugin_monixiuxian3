@@ -58,20 +58,7 @@ class StorageRingManager:
 
     def is_pill(self, item_name: str) -> bool:
         """检查物品是否为丹药类型"""
-        # 检查所有丹药配置
-        if item_name in self.config_manager.pills_data:
-            return True
-        if item_name in self.config_manager.exp_pills_data:
-            return True
-        if item_name in self.config_manager.utility_pills_data:
-            return True
-
-        # 检查items.json中的丹药类型
-        item_config = self.config_manager.items_data.get(item_name)
-        if item_config and item_config.get("type") in self.PILL_TYPES:
-            return True
-
-        return False
+        return self.config_manager.is_pill(item_name)
 
     def can_store_item(self, item_name: str) -> Tuple[bool, str]:
         """检查物品是否可以存入储物戒"""
