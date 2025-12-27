@@ -43,6 +43,31 @@ class RiftManager:
         ],
     }
     
+    # 秘境稀有丹药掉落表（按秘境等级分组，低概率掉落通用增益丹）
+    RIFT_PILL_DROP_TABLE = {
+        1: [  # 低级秘境 - 3%概率掉落
+            {"name": "三品凝神增益丹", "weight": 100, "min": 1, "max": 1},
+        ],
+        2: [  # 中级秘境 - 5%概率掉落
+            {"name": "三品凝神增益丹", "weight": 50, "min": 1, "max": 1},
+            {"name": "四品破境增益丹", "weight": 40, "min": 1, "max": 1},
+            {"name": "五品渡劫增益丹", "weight": 10, "min": 1, "max": 1},
+        ],
+        3: [  # 高级秘境 - 10%概率掉落
+            {"name": "四品破境增益丹", "weight": 40, "min": 1, "max": 1},
+            {"name": "五品渡劫增益丹", "weight": 30, "min": 1, "max": 1},
+            {"name": "六品破境增益丹", "weight": 20, "min": 1, "max": 1},
+            {"name": "七品化神增益丹", "weight": 10, "min": 1, "max": 1},
+        ],
+    }
+    
+    # 秘境丹药掉落概率（百分比）
+    RIFT_PILL_DROP_CHANCE = {
+        1: 3,   # 低级秘境 3%
+        2: 5,   # 中级秘境 5%
+        3: 10,  # 高级秘境 10%
+    }
+    
     def __init__(self, db: DataBase, config_manager=None, storage_ring_manager: "StorageRingManager" = None):
         self.db = db
         self.config_manager = config_manager
@@ -308,4 +333,45 @@ class RiftManager:
                     dropped_items.append((item["name"], count))
                     break
         
+        # 稀有丹药掉落检测
+        pill_drops = self._roll_pill_drops(rift_level)
+        if pill_drops:
+            dropped_items.extend(pill_drops)
+        
         return dropped_items
+    
+    def _roll_pill_drops(self, rift_level: int) -> List[Tuple[str, int]]:
+        """
+        根据秘境等级随机掉落稀有丹药
+        
+        Args:
+            rift_level: 秘境等级 (1-3)
+            
+        Returns:
+            掉落丹药列表 [(丹药名, 数量), ...]
+        """
+        dropped_pills = []
+        
+        # 获取丹药掉落概率
+        pill_chance = self.RIFT_PILL_DROP_CHANCE.get(rift_level, 3)
+        
+        # 检查是否触发丹药掉落
+        if random.randint(1, 100) > pill_chance:
+            return dropped_pills
+        
+        # 获取对应等级的丹药掉落表
+        pill_table = self.RIFT_PILL_DROP_TABLE.get(rift_level, self.RIFT_PILL_DROP_TABLE[1])
+        
+        # 加权随机选择丹药
+        total_weight = sum(item["weight"] for item in pill_table)
+        roll = random.randint(1, total_weight)
+        
+        current_weight = 0
+        for item in pill_table:
+            current_weight += item["weight"]
+            if roll <= current_weight:
+                count = random.randint(item["min"], item["max"])
+                dropped_pills.append((item["name"], count))
+                break
+        
+        return dropped_pills

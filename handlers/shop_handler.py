@@ -315,6 +315,24 @@ class ShopHandler:
                 else:
                     effect_msgs.append(f"灵石{gold_change}")
 
+            # 处理突破成功率加成（添加为临时效果，持续1小时）
+            if 'add_breakthrough_bonus' in effects:
+                bonus = effects['add_breakthrough_bonus']
+                import time
+                current_effects = player.get_active_pill_effects()
+                new_effect = {
+                    "pill_name": pill_name,
+                    "subtype": "breakthrough_boost",
+                    "breakthrough_bonus": bonus,
+                    "expiry_time": int(time.time()) + 3600,  # 1小时有效期
+                }
+                current_effects.append(new_effect)
+                player.set_active_pill_effects(current_effects)
+                if bonus > 0:
+                    effect_msgs.append(f"突破成功率+{int(bonus*100)}%(1小时)")
+                else:
+                    effect_msgs.append(f"突破成功率{int(bonus*100)}%(1小时)")
+
         # 确保属性不为负
         player.physical_damage = max(0, player.physical_damage)
         player.magic_damage = max(0, player.magic_damage)
