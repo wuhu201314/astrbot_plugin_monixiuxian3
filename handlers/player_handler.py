@@ -193,6 +193,7 @@ class PlayerHandler:
             reply_msg += (
                 f"  气血：{player.blood_qi}/{total_attrs.get('max_blood_qi', 0)}\n"
                 f"  物伤：{total_attrs['physical_damage']}\n"
+                f"  法伤：{total_attrs['magic_damage']}\n"
                 f"  物防：{total_attrs['physical_defense']}\n"
                 f"  法防：{total_attrs['magic_defense']}\n"
             )
