@@ -72,13 +72,18 @@ class StorageRingManager:
 
         return True, ""
 
-    async def store_item(self, player: Player, item_name: str, count: int = 1, silent: bool = False) -> Tuple[bool, str]:
-        """将物品存入储物戒（带事务保护）"""
+    async def store_item(self, player: Player, item_name: str, count: int = 1, silent: bool = False, external_transaction: bool = False) -> Tuple[bool, str]:
+        """将物品存入储物戒（带事务保护）
+        
+        Args:
+            external_transaction: 如果为True，表示外部已有事务，跳过内部事务管理
+        """
         can_store, reason = self.can_store_item(item_name)
         if not can_store:
             return False, reason
 
-        await self.db.conn.execute("BEGIN IMMEDIATE")
+        if not external_transaction:
+            await self.db.conn.execute("BEGIN IMMEDIATE")
         try:
             player = await self.db.get_player_by_id(player.user_id)
             items = player.get_storage_ring_items()
@@ -86,14 +91,16 @@ class StorageRingManager:
             if item_name not in items:
                 available = self.get_available_slots(player)
                 if available <= 0:
-                    await self.db.conn.rollback()
+                    if not external_transaction:
+                        await self.db.conn.rollback()
                     capacity = self.get_ring_capacity(player.storage_ring)
                     return False, f"储物戒已满！({capacity}/{capacity}格)"
 
             items[item_name] = items.get(item_name, 0) + count
             player.set_storage_ring_items(items)
             await self.db.update_player(player)
-            await self.db.conn.commit()
+            if not external_transaction:
+                await self.db.conn.commit()
 
             capacity = self.get_ring_capacity(player.storage_ring)
             used = self.get_used_slots(player)
@@ -108,7 +115,8 @@ class StorageRingManager:
 
             return True, msg
         except Exception:
-            await self.db.conn.rollback()
+            if not external_transaction:
+                await self.db.conn.rollback()
             raise
 
     async def retrieve_item(self, player: Player, item_name: str, count: int = 1) -> Tuple[bool, str]:

@@ -581,6 +581,7 @@ class DatabaseExtended:
     
     async def get_system_config(self, key: str) -> Optional[str]:
         """获取系统配置"""
+        await self.ensure_system_config_table()
         async with self.conn.execute(
             "SELECT value FROM system_config WHERE key = ?",
             (key,)
@@ -591,6 +592,7 @@ class DatabaseExtended:
     async def set_system_config(self, key: str, value: str):
         """设置系统配置"""
         import time
+        await self.ensure_system_config_table()
         await self.conn.execute(
             """
             INSERT INTO system_config (key, value, updated_at) VALUES (?, ?, ?)

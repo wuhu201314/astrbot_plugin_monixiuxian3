@@ -165,7 +165,7 @@ class ShopHandler:
                 return
 
             if item_type in ['weapon', 'armor', 'main_technique', 'technique', 'accessory']:
-                success, msg = await self.storage_ring_manager.store_item(player, target_item['name'], quantity)
+                success, msg = await self.storage_ring_manager.store_item(player, target_item['name'], quantity, external_transaction=True)
                 if success:
                     type_name = {"weapon": "武器", "armor": "防具", "main_technique": "心法", "technique": "功法", "accessory": "饰品"}.get(item_type, "装备")
                     result_lines.append(f"成功购买{type_name}【{target_item['name']}】x{quantity}，已存入储物戒。")
@@ -183,14 +183,14 @@ class ShopHandler:
                     return
                 result_lines.append(message)
             elif item_type == 'material':
-                success, msg = await self.storage_ring_manager.store_item(player, target_item['name'], quantity)
+                success, msg = await self.storage_ring_manager.store_item(player, target_item['name'], quantity, external_transaction=True)
                 if success:
                     result_lines.append(f"成功购买材料【{target_item['name']}】x{quantity}，已存入储物戒。")
                 else:
                     result_lines.append(f"成功购买材料【{target_item['name']}】x{quantity}。")
                     result_lines.append(f"⚠️ 存入储物戒失败：{msg}")
             elif item_type == '功法':
-                success, msg = await self.storage_ring_manager.store_item(player, target_item['name'], quantity)
+                success, msg = await self.storage_ring_manager.store_item(player, target_item['name'], quantity, external_transaction=True)
                 if success:
                     result_lines.append(f"成功购买功法【{target_item['name']}】x{quantity}，已存入储物戒。")
                 else:

@@ -376,7 +376,7 @@ class XiuXianPlugin(Star):
         try:
             platforms = self.context.platform_manager.get_insts()
             for platform in platforms:
-                platform_name = platform.meta.name if hasattr(platform, 'meta') else "unknown"
+                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "unknown"
                 for group_id in self.whitelist_groups:
                     # 构建 unified_msg_origin: platform_name:message_type:session_id
                     umo = f"{platform_name}:GroupMessage:{group_id}"
@@ -413,7 +413,7 @@ class XiuXianPlugin(Star):
         try:
             platforms = self.context.platform_manager.get_insts()
             for platform in platforms:
-                platform_name = platform.meta.name if hasattr(platform, 'meta') else "unknown"
+                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "unknown"
                 for group_id in self.whitelist_groups:
                     umo = f"{platform_name}:GroupMessage:{group_id}"
                     try:
@@ -482,7 +482,7 @@ class XiuXianPlugin(Star):
         try:
             platforms = self.context.platform_manager.get_insts()
             for platform in platforms:
-                platform_name = platform.meta.name if hasattr(platform, 'meta') else "unknown"
+                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "unknown"
                 for group_id in self.whitelist_groups:
                     umo = f"{platform_name}:GroupMessage:{group_id}"
                     try:
@@ -568,7 +568,7 @@ class XiuXianPlugin(Star):
         try:
             platforms = self.context.platform_manager.get_insts()
             for platform in platforms:
-                platform_name = platform.meta.name if hasattr(platform, 'meta') else "unknown"
+                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "unknown"
                 for group_id in self.whitelist_groups:
                     umo = f"{platform_name}:GroupMessage:{group_id}"
                     try:
@@ -921,8 +921,18 @@ class XiuXianPlugin(Star):
     @filter.command(CMD_RIFT_COMPLETE, "完成秘境探索")
     @require_whitelist
     async def handle_rift_complete(self, event: AstrMessageEvent):
-        async for r in self.rift_handlers.handle_rift_complete(event):
-            yield r
+        user_id = event.get_sender_id()
+        success, msg, reward_data = await self.rift_mgr.finish_exploration(user_id)
+        
+        # 如果秘境探索成功完成，更新悬赏进度
+        if success and reward_data:
+            player = await self.db.get_player_by_id(user_id)
+            if player:
+                has_progress, bounty_msg = await self.bounty_mgr.add_bounty_progress(player, "rift", 1)
+                if has_progress:
+                    msg += bounty_msg
+        
+        yield event.plain_result(msg)
 
     @filter.command(CMD_RIFT_EXIT, "退出秘境")
     @require_whitelist
@@ -940,8 +950,18 @@ class XiuXianPlugin(Star):
     @filter.command(CMD_ADVENTURE_COMPLETE, "完成历练")
     @require_whitelist
     async def handle_adventure_complete(self, event: AstrMessageEvent):
-        async for r in self.adventure_handlers.handle_complete_adventure(event):
-            yield r
+        user_id = event.get_sender_id()
+        success, msg, reward_data = await self.adventure_mgr.finish_adventure(user_id)
+        
+        # 如果历练成功完成，更新悬赏进度
+        if success and reward_data:
+            player = await self.db.get_player_by_id(user_id)
+            if player:
+                has_progress, bounty_msg = await self.bounty_mgr.add_bounty_progress(player, "adventure", 1)
+                if has_progress:
+                    msg += bounty_msg
+        
+        yield event.plain_result(msg)
 
     @filter.command(CMD_ADVENTURE_STATUS, "查看历练状态")
     @require_whitelist
