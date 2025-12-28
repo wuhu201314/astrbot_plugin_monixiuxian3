@@ -86,6 +86,7 @@ CMD_RANK_POWER = "战力排行"
 CMD_RANK_WEALTH = "灵石排行"
 CMD_RANK_SECT = "宗门排行"
 CMD_RANK_DEPOSIT = "存款排行"
+CMD_RANK_CONTRIBUTION = "贡献排行"
 
 # 战斗指令
 CMD_DUEL = "决斗"
@@ -190,7 +191,7 @@ class XiuXianPlugin(Star):
         self.sect_mgr = SectManager(self.db, self.config_manager)
         self.boss_mgr = BossManager(self.db, self.combat_mgr, self.config_manager, self.storage_ring_mgr)
         self.rift_mgr = RiftManager(self.db, self.config_manager, self.storage_ring_mgr)
-        self.rank_mgr = RankingManager(self.db, self.combat_mgr)
+        self.rank_mgr = RankingManager(self.db, self.combat_mgr, self.config_manager)
         self.adventure_mgr = AdventureManager(self.db, self.storage_ring_mgr)
         self.alchemy_mgr = AlchemyManager(self.db, self.config_manager, self.storage_ring_mgr)
         self.impart_mgr = ImpartManager(self.db)
@@ -882,6 +883,12 @@ class XiuXianPlugin(Star):
     @require_whitelist
     async def handle_rank_deposit(self, event: AstrMessageEvent):
         async for r in self.ranking_handlers.handle_rank_deposit(event):
+            yield r
+
+    @filter.command(CMD_RANK_CONTRIBUTION, "查看宗门贡献排行榜")
+    @require_whitelist
+    async def handle_rank_contribution(self, event: AstrMessageEvent):
+        async for r in self.ranking_handlers.handle_rank_sect_contribution(event):
             yield r
 
     # ===== 战斗指令 =====

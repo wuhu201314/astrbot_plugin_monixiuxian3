@@ -3,17 +3,60 @@
 排行榜系统管理器 - 处理各种排行榜逻辑
 """
 
-from typing import Tuple, List
+from typing import Tuple, List, TYPE_CHECKING, Optional
 from ..data.data_manager import DataBase
 from ..managers.combat_manager import CombatManager
+
+if TYPE_CHECKING:
+    from ..config_manager import ConfigManager
+    from ..models import Player
+
+# 宗门职位映射（安全映射，防止索引越界）
+POSITION_MAP = {
+    0: "宗主",
+    1: "长老",
+    2: "亲传",
+    3: "内门",
+    4: "外门",
+}
+
+# 名称最大显示长度
+MAX_NAME_LENGTH = 12
+
+
+def _short_id(user_id) -> str:
+    """安全获取短ID，防止非字符串类型报错"""
+    if user_id is None:
+        return "未知"
+    return str(user_id)[:6]
+
+
+def _safe_name(player: Optional["Player"], fallback_id) -> str:
+    """安全获取玩家名称，带长度截断和特殊字符过滤"""
+    if player and player.user_name:
+        name = player.user_name
+    else:
+        name = f"道友{_short_id(fallback_id)}"
+    
+    # 过滤危险字符（@可能触发群通知）
+    name = name.replace("@", "＠")
+    # 截断过长名称
+    if len(name) > MAX_NAME_LENGTH:
+        name = name[:MAX_NAME_LENGTH] + "…"
+    return name
 
 
 class RankingManager:
     """排行榜系统管理器"""
     
-    def __init__(self, db: DataBase, combat_mgr: CombatManager):
+    def __init__(self, db: DataBase, combat_mgr: CombatManager, config_manager: "ConfigManager"):
         self.db = db
         self.combat_mgr = combat_mgr
+        self.config_manager = config_manager
+        
+        # 延迟导入，避免循环依赖，只初始化一次
+        from ..core import EquipmentManager
+        self.equipment_manager = EquipmentManager(self.db, self.config_manager)
     
     async def get_level_ranking(self, limit: int = 10) -> Tuple[bool, str]:
         """
@@ -37,15 +80,19 @@ class RankingManager:
         msg += "━━━━━━━━━━━━━━━\n"
         
         for idx, player in enumerate(sorted_players, 1):
-            name = player.user_name if player.user_name else f"道友{player.user_id[:6]}"
+            name = _safe_name(player, player.user_id)
+            level_name = player.get_level(self.config_manager)
             msg += f"{idx}. {name}\n"
-            msg += f"   境界：Lv.{player.level_index} | 修为：{player.experience:,}\n\n"
+            msg += f"   境界：{level_name} | 修为：{player.experience:,}\n\n"
         
         return True, msg
     
     async def get_power_ranking(self, limit: int = 10) -> Tuple[bool, str]:
         """
-        战力排行榜（基于ATK）
+        战力排行榜（基于综合属性）
+        
+        战力计算公式：物伤 + 法伤 + 物防 + 法防 + 精神力/10
+        与玩家信息显示的战力保持一致
         
         Args:
             limit: 显示数量
@@ -58,23 +105,29 @@ class RankingManager:
         if not all_players:
             return False, "❌ 暂无数据！"
         
-        # 计算战力（ATK + HP + MP综合）
+        # 计算战力（综合属性）
         player_power = []
         for player in all_players:
-            # 如果没有战斗属性，先计算
-            if player.atk == 0:
-                atk = self.combat_mgr.calculate_atk(player.experience, player.atkpractice)
-            else:
-                atk = player.atk
+            # 获取装备加成
+            equipped_items = self.equipment_manager.get_equipped_items(
+                player,
+                self.config_manager.items_data,
+                self.config_manager.weapons_data
+            )
             
-            if player.hp == 0:
-                hp, _ = self.combat_mgr.calculate_hp_mp(player.experience)
-            else:
-                hp = player.hp
+            # 获取丹药效果
+            pill_multipliers = player.get_pill_multipliers()
             
-            # 战力 = ATK * 10 + HP
-            power = atk * 10 + hp
-            player_power.append((player, power))
+            # 计算总属性
+            total_attrs = player.get_total_attributes(equipped_items, pill_multipliers)
+            
+            # 战力 = 物伤 + 法伤 + 物防 + 法防 + 精神力/10
+            combat_power = (
+                int(total_attrs['physical_damage']) + int(total_attrs['magic_damage']) +
+                int(total_attrs['physical_defense']) + int(total_attrs['magic_defense']) +
+                int(total_attrs['mental_power']) // 10
+            )
+            player_power.append((player, combat_power, total_attrs))
         
         # 按战力排序
         sorted_players = sorted(player_power, key=lambda x: x[1], reverse=True)[:limit]
@@ -82,11 +135,17 @@ class RankingManager:
         msg = "📊 战力排行榜\n"
         msg += "━━━━━━━━━━━━━━━\n"
         
-        for idx, (player, power) in enumerate(sorted_players, 1):
-            name = player.user_name if player.user_name else f"道友{player.user_id[:6]}"
-            atk = player.atk if player.atk > 0 else self.combat_mgr.calculate_atk(player.experience, player.atkpractice)
+        for idx, (player, power, attrs) in enumerate(sorted_players, 1):
+            name = _safe_name(player, player.user_id)
+            # 显示主要攻击属性（根据修炼类型）
+            if player.cultivation_type == "体修":
+                main_atk = int(attrs['physical_damage'])
+                atk_label = "物伤"
+            else:
+                main_atk = int(attrs['magic_damage'])
+                atk_label = "法伤"
             msg += f"{idx}. {name}\n"
-            msg += f"   战力：{power:,} | ATK：{atk:,}\n\n"
+            msg += f"   战力：{power:,} | {atk_label}：{main_atk:,}\n\n"
         
         return True, msg
     
@@ -112,7 +171,7 @@ class RankingManager:
         msg += "━━━━━━━━━━━━━━━\n"
         
         for idx, player in enumerate(sorted_players, 1):
-            name = player.user_name if player.user_name else f"道友{player.user_id[:6]}"
+            name = _safe_name(player, player.user_id)
             msg += f"{idx}. {name}\n"
             msg += f"   灵石：{player.gold:,}\n\n"
         
@@ -133,18 +192,23 @@ class RankingManager:
         if not all_sects:
             return False, "❌ 暂无宗门数据！"
         
-        # 已经按建设度排序
-        top_sects = all_sects[:limit]
+        # 显式按建设度排序，不依赖DB层的排序行为
+        top_sects = sorted(all_sects, key=lambda s: s.sect_scale, reverse=True)[:limit]
         
         msg = "📊 宗门排行榜\n"
         msg += "━━━━━━━━━━━━━━━\n"
         
         for idx, sect in enumerate(top_sects, 1):
             owner = await self.db.get_player_by_id(sect.sect_owner)
-            owner_name = owner.user_name if owner and owner.user_name else "未知"
+            owner_name = _safe_name(owner, sect.sect_owner)
             members = await self.db.ext.get_sect_members(sect.sect_id)
             
-            msg += f"{idx}. 【{sect.sect_name}】\n"
+            # 宗门名称也需要安全处理
+            sect_name = sect.sect_name.replace("@", "＠")
+            if len(sect_name) > MAX_NAME_LENGTH:
+                sect_name = sect_name[:MAX_NAME_LENGTH] + "…"
+            
+            msg += f"{idx}. 【{sect_name}】\n"
             msg += f"   宗主：{owner_name}\n"
             msg += f"   建设度：{sect.sect_scale:,} | 成员：{len(members)}人\n\n"
         
@@ -169,8 +233,9 @@ class RankingManager:
         msg += "━━━━━━━━━━━━━━━\n"
         
         for idx, item in enumerate(rankings, 1):
-            player = await self.db.get_player_by_id(item["user_id"])
-            name = player.user_name if player and player.user_name else f"道友{item['user_id'][:6]}"
+            uid = item["user_id"]
+            player = await self.db.get_player_by_id(uid)
+            name = _safe_name(player, uid)
             msg += f"{idx}. {name}\n"
             msg += f"   存款：{item['balance']:,} 灵石\n\n"
         
@@ -199,12 +264,18 @@ class RankingManager:
         # 按贡献度排序
         sorted_members = sorted(members, key=lambda p: p.sect_contribution, reverse=True)[:limit]
         
-        msg = f"📊 {sect.sect_name} 贡献排行\n"
+        # 宗门名称安全处理
+        sect_name = sect.sect_name.replace("@", "＠")
+        if len(sect_name) > MAX_NAME_LENGTH:
+            sect_name = sect_name[:MAX_NAME_LENGTH] + "…"
+        
+        msg = f"📊 {sect_name} 贡献排行\n"
         msg += f"━━━━━━━━━━━━━━━\n"
         
         for idx, member in enumerate(sorted_members, 1):
-            name = member.user_name if member.user_name else f"道友{member.user_id[:6]}"
-            position_name = ["宗主", "长老", "亲传", "内门", "外门"][member.sect_position]
+            name = _safe_name(member, member.user_id)
+            # 使用安全映射获取职位名称，防止索引越界
+            position_name = POSITION_MAP.get(member.sect_position, "成员")
             msg += f"{idx}. {name} ({position_name})\n"
             msg += f"   贡献度：{member.sect_contribution:,}\n\n"
         
