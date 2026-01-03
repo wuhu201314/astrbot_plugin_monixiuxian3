@@ -295,7 +295,8 @@ class EquipmentManager:
             存储结果消息
         """
         if not self.storage_ring_manager:
-            return ""
+            # 没有储物戒管理器时，提醒玩家旧装备丢失
+            return f"\n⚠️ 旧装备【{item_name}】已丢失（储物戒系统未初始化）"
 
         success, msg = await self.storage_ring_manager.store_item(player, item_name, 1, silent=True)
         if success:

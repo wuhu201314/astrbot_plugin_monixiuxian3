@@ -110,13 +110,15 @@ class BreakthroughManager:
         player: Player,
         pill_name: Optional[str] = None,
         temp_bonus: float = 0.0,
-        death_rate_multiplier: float = 1.0
+        death_rate_multiplier: float = 1.0,
+        tribulation_manager=None
     ) -> Tuple[bool, str, bool]:
         """执行突破
 
         Args:
             player: 玩家对象
             pill_name: 使用的破境丹名称（可选）
+            tribulation_manager: 天劫管理器（可选）
 
         Returns:
             (是否成功, 消息, 是否死亡)
@@ -142,6 +144,29 @@ class BreakthroughManager:
         next_level_name = next_level_data["level_name"]
 
         if breakthrough_success:
+            # 检查是否需要渡天劫（金丹期及以上）
+            tribulation_msg = ""
+            if tribulation_manager and tribulation_manager.should_trigger_tribulation(player, next_level_index):
+                # 显示天劫预警
+                preview = tribulation_manager.get_tribulation_preview(player, next_level_index)
+                
+                # 执行天劫
+                trib_success, trib_log, trib_result = await tribulation_manager.execute_tribulation(player, next_level_index)
+                tribulation_msg = f"\n{trib_log}"
+                
+                if not trib_success:
+                    # 天劫失败，突破失败但不死亡
+                    fail_msg = (
+                        f"❌ 突破失败 ❌\n"
+                        f"━━━━━━━━━━━━━━━\n"
+                        f"{rate_info}\n"
+                        f"━━━━━━━━━━━━━━━\n"
+                        f"突破【{next_level_name}】时触发天劫...\n"
+                        f"{tribulation_msg}\n"
+                        f"\n请继续修炼，再接再厉！"
+                    )
+                    return False, fail_msg, False
+            
             # 突破成功 - 提升境界并更新属性
             old_level_index = player.level_index
             player.level_index = next_level_index
@@ -246,91 +271,29 @@ class BreakthroughManager:
             return True, success_msg, False
 
         else:
-            # 突破失败 - 判断是否死亡
-            death_probability_range = self.config.get("VALUES", {}).get(
-                "BREAKTHROUGH_DEATH_PROBABILITY",
-                [0.01, 0.1]  # 默认1%-10%死亡概率
+            # 突破失败 - 扣除部分修为（不会死亡）
+            exp_penalty = int(player.experience * 0.1)  # 扣除10%修为
+            player.experience = max(0, player.experience - exp_penalty)
+
+            await self.db.update_player(player)
+
+            fail_msg = (
+                f"❌ 突破失败 ❌\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"{rate_info}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"突破【{next_level_name}】失败，但幸运地保住了性命\n"
+                f"修为受损，损失了 {exp_penalty} 点修为\n"
+                f"当前修为：{player.experience}\n"
+                f"请继续修炼，再接再厉！"
             )
 
-            # 随机一个死亡概率
-            death_rate = random.uniform(death_probability_range[0], death_probability_range[1])
-            death_rate = max(0.0, min(1.0, death_rate * death_rate_multiplier))
-            died = random.random() < death_rate
+            logger.info(
+                f"玩家 {player.user_id} 突破失败：{current_level_name} -> {next_level_name}，"
+                f"损失修为 {exp_penalty}"
+            )
 
-            if died:
-                # 检查是否有回生丹效果
-                from .pill_manager import PillManager
-                pill_manager = PillManager(self.db, self.config_manager)
-                resurrected = await pill_manager.handle_resurrection(player)
-
-                if resurrected:
-                    # 回生丹触发，玩家复活
-                    resurrection_msg = (
-                        f"💀 突破失败，走火入魔！💀\n"
-                        f"━━━━━━━━━━━━━━━\n"
-                        f"{rate_info}\n"
-                        f"━━━━━━━━━━━━━━━\n"
-                        f"你在突破【{next_level_name}】时走火入魔...\n"
-                        f"\n"
-                        f"⚡ 回生丹效果触发！⚡\n"
-                        f"━━━━━━━━━━━━━━━\n"
-                        f"🌟 你涅槃重生了！\n"
-                        f"⚠️ 但所有属性降低到之前的一半\n"
-                        f"💊 回生丹效果已消耗\n"
-                        f"━━━━━━━━━━━━━━━\n"
-                        f"请继续修炼，重回巅峰！"
-                    )
-
-                    logger.info(
-                        f"玩家 {player.user_id} 突破失败触发回生丹，成功复活"
-                    )
-
-                    # 返回False（突破失败），消息，False（未真正死亡）
-                    return False, resurrection_msg, False
-
-                # 玩家死亡 - 级联删除所有关联数据
-                await self.db.delete_player_cascade(player.user_id)
-
-                death_msg = (
-                    f"💀 突破失败，走火入魔！💀\n"
-                    f"━━━━━━━━━━━━━━━\n"
-                    f"{rate_info}\n"
-                    f"━━━━━━━━━━━━━━━\n"
-                    f"你在突破【{next_level_name}】时走火入魔，身死道消...\n"
-                    f"所有修为和装备化为虚无\n"
-                    f"若想重新修仙，请使用'我要修仙'命令重新开始"
-                )
-
-                logger.info(
-                    f"玩家 {player.user_id} 突破失败并死亡：{current_level_name} -> {next_level_name}，死亡概率 {death_rate:.2%}"
-                )
-
-                return False, death_msg, True
-
-            else:
-                # 突破失败但未死亡 - 扣除部分修为
-                exp_penalty = int(player.experience * 0.1)  # 扣除10%修为
-                player.experience = max(0, player.experience - exp_penalty)
-
-                await self.db.update_player(player)
-
-                fail_msg = (
-                    f"❌ 突破失败 ❌\n"
-                    f"━━━━━━━━━━━━━━━\n"
-                    f"{rate_info}\n"
-                    f"━━━━━━━━━━━━━━━\n"
-                    f"突破【{next_level_name}】失败，但幸运地保住了性命\n"
-                    f"修为受损，损失了 {exp_penalty} 点修为\n"
-                    f"当前修为：{player.experience}\n"
-                    f"请继续修炼，再接再厉！"
-                )
-
-                logger.info(
-                    f"玩家 {player.user_id} 突破失败：{current_level_name} -> {next_level_name}，"
-                    f"损失修为 {exp_penalty}"
-                )
-
-                return False, fail_msg, False
+            return False, fail_msg, False
     
     async def _handle_breakthrough_loan_repay(self, player: Player) -> str:
         """处理突破贷款自动还款
@@ -388,4 +351,5 @@ class BreakthroughManager:
                 )
         except Exception as e:
             logger.warning(f"处理突破贷款自动还款异常: {e}")
-            return ""
+            # 返回警告消息而不是空字符串，让玩家知道可能有问题
+            return "⚠️ 贷款处理异常，请使用 /银行 查看贷款状态"
