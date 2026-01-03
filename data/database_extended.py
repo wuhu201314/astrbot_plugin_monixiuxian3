@@ -220,7 +220,7 @@ class DatabaseExtended:
             return row[0] if row else None
     
     async def get_active_boss(self) -> Optional[Boss]:
-        """获取当前存活的Boss"""
+        """获取当前存活的Boss（返回最新的一个，兼容旧代码）"""
         async with self.conn.execute(
             "SELECT * FROM boss WHERE status = 1 ORDER BY create_time DESC LIMIT 1"
         ) as cursor:
@@ -228,6 +228,14 @@ class DatabaseExtended:
             if row:
                 return Boss(**dict(row))
             return None
+    
+    async def get_all_active_bosses(self) -> list:
+        """获取所有存活的Boss"""
+        async with self.conn.execute(
+            "SELECT * FROM boss WHERE status = 1 ORDER BY create_time DESC"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [Boss(**dict(row)) for row in rows]
     
     async def get_boss_by_id(self, boss_id: int) -> Optional[Boss]:
         """根据ID获取Boss信息"""
@@ -579,6 +587,32 @@ class DatabaseExtended:
         """)
         await self.conn.commit()
     
+    async def ensure_default_rifts(self):
+        """确保默认秘境数据存在"""
+        # 检查秘境表是否有数据
+        async with self.conn.execute("SELECT COUNT(*) FROM rifts") as cursor:
+            row = await cursor.fetchone()
+            count = row[0] if row else 0
+        
+        if count == 0:
+            # 插入默认秘境数据
+            default_rifts = [
+                (1, "青云秘境", 1, 0, json.dumps({"exp": [500, 1500], "gold": [200, 800]})),
+                (2, "落日峡谷", 2, 3, json.dumps({"exp": [1500, 4000], "gold": [500, 2000]})),
+                (3, "万妖洞", 3, 6, json.dumps({"exp": [3000, 8000], "gold": [1000, 5000]})),
+                (4, "玄冰地宫", 4, 10, json.dumps({"exp": [5000, 15000], "gold": [2000, 10000]})),
+                (5, "上古遗迹", 5, 15, json.dumps({"exp": [10000, 30000], "gold": [5000, 20000]})),
+            ]
+            
+            for rift in default_rifts:
+                await self.conn.execute(
+                    "INSERT OR IGNORE INTO rifts (rift_id, rift_name, rift_level, required_level, rewards) VALUES (?, ?, ?, ?, ?)",
+                    rift
+                )
+            await self.conn.commit()
+            return True
+        return False
+    
     async def get_system_config(self, key: str) -> Optional[str]:
         """获取系统配置"""
         await self.ensure_system_config_table()
@@ -843,3 +877,262 @@ class DatabaseExtended:
                     "balance": row[1]
                 })
         return rankings
+
+    # ===== 通天塔系统 CRUD =====
+    
+    async def ensure_tower_table(self):
+        """确保通天塔数据表存在"""
+        await self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS tower_data (
+                user_id TEXT PRIMARY KEY,
+                current_floor INTEGER DEFAULT 0,
+                highest_floor INTEGER DEFAULT 0,
+                points INTEGER DEFAULT 0,
+                total_points INTEGER DEFAULT 0,
+                weekly_purchases TEXT DEFAULT '{}',
+                extra_data TEXT DEFAULT '{}',
+                last_reset INTEGER DEFAULT 0
+            )
+        """)
+        await self.conn.commit()
+    
+    async def get_tower_data(self, user_id: str) -> Optional[dict]:
+        """获取玩家通天塔数据"""
+        await self.ensure_tower_table()
+        async with self.conn.execute(
+            "SELECT * FROM tower_data WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {
+                    "user_id": row[0],
+                    "current_floor": row[1],
+                    "highest_floor": row[2],
+                    "points": row[3],
+                    "total_points": row[4],
+                    "weekly_purchases": json.loads(row[5]) if row[5] else {},
+                    "extra_data": json.loads(row[6]) if row[6] else {},
+                    "last_reset": row[7]
+                }
+            return None
+    
+    async def save_tower_data(self, user_id: str, data: dict):
+        """保存玩家通天塔数据"""
+        await self.ensure_tower_table()
+        weekly_purchases = json.dumps(data.get("weekly_purchases", {}))
+        extra_data = json.dumps(data.get("extra_data", data.get("extra_buffs", {})))
+        
+        await self.conn.execute(
+            """
+            INSERT INTO tower_data (user_id, current_floor, highest_floor, points, total_points, weekly_purchases, extra_data)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                current_floor = ?, highest_floor = ?, points = ?, total_points = ?,
+                weekly_purchases = ?, extra_data = ?
+            """,
+            (
+                user_id, data.get("current_floor", 0), data.get("highest_floor", 0),
+                data.get("points", 0), data.get("total_points", 0), weekly_purchases, extra_data,
+                data.get("current_floor", 0), data.get("highest_floor", 0),
+                data.get("points", 0), data.get("total_points", 0), weekly_purchases, extra_data
+            )
+        )
+        await self.conn.commit()
+    
+    async def get_tower_floor_ranking(self, limit: int = 10) -> List[tuple]:
+        """获取通天塔层数排行榜"""
+        await self.ensure_tower_table()
+        async with self.conn.execute(
+            """
+            SELECT t.user_id, p.user_name, t.highest_floor
+            FROM tower_data t
+            LEFT JOIN players p ON t.user_id = p.user_id
+            WHERE t.highest_floor > 0
+            ORDER BY t.highest_floor DESC
+            LIMIT ?
+            """,
+            (limit,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [(row[0], row[1], row[2]) for row in rows]
+    
+    async def get_tower_points_ranking(self, limit: int = 10) -> List[tuple]:
+        """获取通天塔积分排行榜"""
+        await self.ensure_tower_table()
+        async with self.conn.execute(
+            """
+            SELECT t.user_id, p.user_name, t.total_points
+            FROM tower_data t
+            LEFT JOIN players p ON t.user_id = p.user_id
+            WHERE t.total_points > 0
+            ORDER BY t.total_points DESC
+            LIMIT ?
+            """,
+            (limit,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [(row[0], row[1], row[2]) for row in rows]
+    
+    async def reset_tower_weekly(self):
+        """每周重置通天塔（层数和限购）"""
+        import time
+        await self.ensure_tower_table()
+        current_time = int(time.time())
+        await self.conn.execute(
+            """
+            UPDATE tower_data SET
+                current_floor = 0,
+                weekly_purchases = '{}',
+                last_reset = ?
+            """,
+            (current_time,)
+        )
+        await self.conn.commit()
+
+    # ===== 社交系统 CRUD =====
+    
+    async def ensure_social_table(self):
+        """确保社交数据表存在"""
+        await self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS social_data (
+                user_id TEXT PRIMARY KEY,
+                master_id TEXT DEFAULT NULL,
+                couple_id TEXT DEFAULT NULL,
+                couple_time INTEGER DEFAULT 0
+            )
+        """)
+        await self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS debate_cooldowns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user1_id TEXT NOT NULL,
+                user2_id TEXT NOT NULL,
+                last_time INTEGER NOT NULL
+            )
+        """)
+        await self.conn.commit()
+    
+    async def get_social_data(self, user_id: str) -> Optional[dict]:
+        """获取用户社交数据"""
+        await self.ensure_social_table()
+        async with self.conn.execute(
+            "SELECT * FROM social_data WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {
+                    "user_id": row[0],
+                    "master_id": row[1],
+                    "couple_id": row[2],
+                    "couple_time": row[3] if len(row) > 3 else 0
+                }
+            return None
+    
+    async def set_master_disciple(self, master_id: str, disciple_id: str):
+        """建立师徒关系"""
+        await self.ensure_social_table()
+        # 更新徒弟的师父
+        await self.conn.execute(
+            """
+            INSERT INTO social_data (user_id, master_id) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET master_id = ?
+            """,
+            (disciple_id, master_id, master_id)
+        )
+        await self.conn.commit()
+    
+    async def remove_master_disciple(self, disciple_id: str):
+        """解除师徒关系"""
+        await self.ensure_social_table()
+        await self.conn.execute(
+            "UPDATE social_data SET master_id = NULL WHERE user_id = ?",
+            (disciple_id,)
+        )
+        await self.conn.commit()
+    
+    async def get_disciples(self, master_id: str) -> List[str]:
+        """获取师父的所有徒弟"""
+        await self.ensure_social_table()
+        async with self.conn.execute(
+            "SELECT user_id FROM social_data WHERE master_id = ?",
+            (master_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
+    
+    async def set_couple(self, user1_id: str, user2_id: str):
+        """建立道侣关系"""
+        import time
+        await self.ensure_social_table()
+        now = int(time.time())
+        
+        # 双向建立关系
+        await self.conn.execute(
+            """
+            INSERT INTO social_data (user_id, couple_id, couple_time) VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET couple_id = ?, couple_time = ?
+            """,
+            (user1_id, user2_id, now, user2_id, now)
+        )
+        await self.conn.execute(
+            """
+            INSERT INTO social_data (user_id, couple_id, couple_time) VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET couple_id = ?, couple_time = ?
+            """,
+            (user2_id, user1_id, now, user1_id, now)
+        )
+        await self.conn.commit()
+    
+    async def remove_couple(self, user_id: str):
+        """解除道侣关系"""
+        await self.ensure_social_table()
+        # 获取道侣ID
+        social_data = await self.get_social_data(user_id)
+        if social_data and social_data.get("couple_id"):
+            couple_id = social_data["couple_id"]
+            # 双向解除
+            await self.conn.execute(
+                "UPDATE social_data SET couple_id = NULL, couple_time = 0 WHERE user_id = ?",
+                (user_id,)
+            )
+            await self.conn.execute(
+                "UPDATE social_data SET couple_id = NULL, couple_time = 0 WHERE user_id = ?",
+                (couple_id,)
+            )
+            await self.conn.commit()
+    
+    async def get_debate_cooldown(self, user1_id: str, user2_id: str) -> Optional[int]:
+        """获取论道冷却时间"""
+        await self.ensure_social_table()
+        # 双向查询
+        async with self.conn.execute(
+            """
+            SELECT last_time FROM debate_cooldowns 
+            WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)
+            """,
+            (user1_id, user2_id, user2_id, user1_id)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+    
+    async def set_debate_cooldown(self, user1_id: str, user2_id: str):
+        """设置论道冷却"""
+        import time
+        await self.ensure_social_table()
+        now = int(time.time())
+        
+        # 先删除旧记录
+        await self.conn.execute(
+            """
+            DELETE FROM debate_cooldowns 
+            WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)
+            """,
+            (user1_id, user2_id, user2_id, user1_id)
+        )
+        # 插入新记录
+        await self.conn.execute(
+            "INSERT INTO debate_cooldowns (user1_id, user2_id, last_time) VALUES (?, ?, ?)",
+            (user1_id, user2_id, now)
+        )
+        await self.conn.commit()

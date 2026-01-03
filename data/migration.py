@@ -5,7 +5,7 @@ from typing import Dict, Callable, Awaitable
 from astrbot.api import logger
 from ..config_manager import ConfigManager
 
-LATEST_DB_VERSION = 20  # v20: 用户CD表添加额外数据字段
+LATEST_DB_VERSION = 24  # v24: 修复灵田表缺少crops列
 
 MIGRATION_TASKS: Dict[int, Callable[[aiosqlite.Connection, ConfigManager], Awaitable[None]]] = {}
 
@@ -988,3 +988,179 @@ async def _migrate_to_v20(conn: aiosqlite.Connection, config_manager: ConfigMana
     
     await conn.commit()
     logger.info("v20迁移完成：用户CD表添加额外数据字段")
+@migration(21)
+async def _migrate_to_v21(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v21 - 重构灵眼表（修复Schema不匹配问题）"""
+    logger.info("开始迁移到v21：重构灵眼表以修复字段缺失错误")
+    
+    # 1. 删除旧的、结构错误的表
+    await conn.execute("DROP TABLE IF EXISTS spirit_eyes")
+    
+    # 2. 创建新表（使用当前代码期望的正确Schema）
+    # 注意：这里整合了v16的定义和v20的last_collect_time字段
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS spirit_eyes (
+            eye_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            eye_type INTEGER NOT NULL DEFAULT 1,
+            eye_name TEXT NOT NULL DEFAULT '下品灵眼',
+            exp_per_hour INTEGER NOT NULL DEFAULT 500,
+            spawn_time INTEGER NOT NULL,
+            owner_id TEXT,
+            owner_name TEXT,
+            claim_time INTEGER,
+            last_collect_time INTEGER
+        )
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_spirit_eyes_owner ON spirit_eyes(owner_id)")
+    
+    # 3. 插入初始灵眼数据
+    import time
+    now = int(time.time())
+    initial_eyes = [
+        (1, "下品灵眼", 500, now),
+        (1, "下品灵眼", 500, now),
+        (2, "中品灵眼", 2000, now),
+    ]
+    for eye in initial_eyes:
+        await conn.execute(
+            "INSERT INTO spirit_eyes (eye_type, eye_name, exp_per_hour, spawn_time) VALUES (?, ?, ?, ?)",
+            eye
+        )
+        
+    logger.info("v21迁移完成：灵眼表已重构")
+
+
+@migration(22)
+async def _migrate_to_v22(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v22 - 修复灵田表缺少列"""
+    logger.info("开始迁移到v22：修复灵田表结构")
+    
+    # 检查spirit_farms表是否存在
+    async with conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='spirit_farms'"
+    ) as cursor:
+        if await cursor.fetchone() is None:
+            # 表不存在，创建完整的表
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS spirit_farms (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL UNIQUE,
+                    level INTEGER NOT NULL DEFAULT 1,
+                    crops TEXT NOT NULL DEFAULT '[]'
+                )
+            """)
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_spirit_farms_user ON spirit_farms(user_id)")
+            logger.info("v22迁移完成：创建了新的灵田表")
+            return
+    
+    # 表存在，检查并添加缺失的列
+    async with conn.execute("PRAGMA table_info(spirit_farms)") as cursor:
+        columns = [row[1] for row in await cursor.fetchall()]
+    
+    added = []
+    if 'level' not in columns:
+        await conn.execute("ALTER TABLE spirit_farms ADD COLUMN level INTEGER NOT NULL DEFAULT 1")
+        added.append('level')
+    
+    if 'crops' not in columns:
+        await conn.execute("ALTER TABLE spirit_farms ADD COLUMN crops TEXT NOT NULL DEFAULT '[]'")
+        added.append('crops')
+    
+    if added:
+        logger.info(f"v22迁移完成：为灵田表添加了列 {', '.join(added)}")
+    else:
+        logger.info("v22迁移完成：灵田表结构正常")
+
+
+@migration(23)
+async def _migrate_to_v23(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v23 - 修复洞天福地表缺少列"""
+    logger.info("开始迁移到v23：修复洞天福地表结构")
+    
+    # 检查blessed_lands表是否存在
+    async with conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='blessed_lands'"
+    ) as cursor:
+        if await cursor.fetchone() is None:
+            # 表不存在，创建完整的表
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS blessed_lands (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL UNIQUE,
+                    land_type INTEGER NOT NULL DEFAULT 1,
+                    land_name TEXT NOT NULL DEFAULT '小洞天',
+                    level INTEGER NOT NULL DEFAULT 1,
+                    exp_bonus REAL NOT NULL DEFAULT 0.05,
+                    gold_per_hour INTEGER NOT NULL DEFAULT 100,
+                    last_collect_time INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_blessed_lands_user ON blessed_lands(user_id)")
+            logger.info("v23迁移完成：创建了新的洞天福地表")
+            return
+    
+    # 表存在，检查并添加缺失的列
+    async with conn.execute("PRAGMA table_info(blessed_lands)") as cursor:
+        columns = [row[1] for row in await cursor.fetchall()]
+    
+    columns_to_add = [
+        ("land_type", "INTEGER NOT NULL DEFAULT 1"),
+        ("land_name", "TEXT NOT NULL DEFAULT '小洞天'"),
+        ("level", "INTEGER NOT NULL DEFAULT 1"),
+        ("exp_bonus", "REAL NOT NULL DEFAULT 0.05"),
+        ("gold_per_hour", "INTEGER NOT NULL DEFAULT 100"),
+        ("last_collect_time", "INTEGER NOT NULL DEFAULT 0"),
+    ]
+    
+    added = []
+    for col_name, col_def in columns_to_add:
+        if col_name not in columns:
+            await conn.execute(f"ALTER TABLE blessed_lands ADD COLUMN {col_name} {col_def}")
+            added.append(col_name)
+    
+    if added:
+        logger.info(f"v23迁移完成：为洞天福地表添加了列 {', '.join(added)}")
+    else:
+        logger.info("v23迁移完成：洞天福地表结构正常")
+
+
+@migration(24)
+async def _migrate_to_v24(conn: aiosqlite.Connection, config_manager: ConfigManager):
+    """迁移到v24 - 修复灵田表缺少crops列"""
+    logger.info("开始迁移到v24：修复灵田表crops列")
+    
+    # 检查spirit_farms表是否存在
+    async with conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='spirit_farms'"
+    ) as cursor:
+        if await cursor.fetchone() is None:
+            # 表不存在，创建完整的表
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS spirit_farms (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL UNIQUE,
+                    level INTEGER NOT NULL DEFAULT 1,
+                    crops TEXT NOT NULL DEFAULT '[]'
+                )
+            """)
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_spirit_farms_user ON spirit_farms(user_id)")
+            logger.info("v24迁移完成：创建了新的灵田表")
+            return
+    
+    # 表存在，检查并添加缺失的列
+    async with conn.execute("PRAGMA table_info(spirit_farms)") as cursor:
+        columns = [row[1] for row in await cursor.fetchall()]
+    
+    added = []
+    if 'level' not in columns:
+        await conn.execute("ALTER TABLE spirit_farms ADD COLUMN level INTEGER NOT NULL DEFAULT 1")
+        added.append('level')
+    
+    if 'crops' not in columns:
+        await conn.execute("ALTER TABLE spirit_farms ADD COLUMN crops TEXT NOT NULL DEFAULT '[]'")
+        added.append('crops')
+    
+    if added:
+        logger.info(f"v24迁移完成：为灵田表添加了列 {', '.join(added)}")
+    else:
+        logger.info("v24迁移完成：灵田表结构正常")

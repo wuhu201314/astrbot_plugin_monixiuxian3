@@ -234,25 +234,61 @@ class DataBase:
 
     async def delete_player_cascade(self, user_id: str):
         """级联删除玩家及所有关联数据"""
-        await self.conn.execute(
-            "UPDATE spirit_eyes SET owner_id = NULL, owner_name = NULL, claim_time = NULL WHERE owner_id = ?",
-            (user_id,)
-        )
-        await self.conn.execute("DELETE FROM blessed_lands WHERE user_id = ?", (user_id,))
-        await self.conn.execute("DELETE FROM spirit_farms WHERE user_id = ?", (user_id,))
-        await self.conn.execute("DELETE FROM bank_accounts WHERE user_id = ?", (user_id,))
-        await self.conn.execute(
-            "UPDATE bank_loans SET status = 'bad_debt' WHERE user_id = ? AND status = 'active'",
-            (user_id,)
-        )
-        await self.conn.execute("DELETE FROM bounty_tasks WHERE user_id = ?", (user_id,))
-        await self.conn.execute("DELETE FROM dual_cultivation WHERE user_id = ?", (user_id,))
-        await self.conn.execute("DELETE FROM dual_cultivation_requests WHERE from_id = ? OR target_id = ?", (user_id, user_id))
-        await self.conn.execute("DELETE FROM user_cd WHERE user_id = ?", (user_id,))
-        await self.conn.execute("DELETE FROM buff_info WHERE user_id = ?", (user_id,))
-        await self.conn.execute("DELETE FROM impart_info WHERE user_id = ?", (user_id,))
-        await self.conn.execute("DELETE FROM combat_cooldowns WHERE attacker_id = ? OR defender_id = ?", (user_id, user_id))
-        await self.conn.execute("DELETE FROM pending_gifts WHERE sender_id = ? OR receiver_id = ?", (user_id, user_id))
+        # 释放灵眼
+        try:
+            await self.conn.execute(
+                "UPDATE spirit_eyes SET owner_id = NULL, owner_name = NULL, claim_time = NULL WHERE owner_id = ?",
+                (user_id,)
+            )
+        except Exception:
+            pass
+        
+        # 删除各种关联数据，忽略表不存在的错误
+        tables_to_delete = [
+            ("blessed_lands", "user_id"),
+            ("spirit_farms", "user_id"),
+            ("bank_accounts", "user_id"),
+            ("bounty_tasks", "user_id"),
+            ("dual_cultivation", "user_id"),
+            ("user_cd", "user_id"),
+            ("buff_info", "user_id"),
+            ("impart_info", "user_id"),
+            ("tower_progress", "user_id"),
+            ("master_disciple", "master_id"),
+            ("master_disciple", "disciple_id"),
+            ("couples", "user1_id"),
+            ("couples", "user2_id"),
+        ]
+        
+        for table, column in tables_to_delete:
+            try:
+                await self.conn.execute(f"DELETE FROM {table} WHERE {column} = ?", (user_id,))
+            except Exception:
+                pass
+        
+        # 处理贷款（标记为坏账）
+        try:
+            await self.conn.execute(
+                "UPDATE bank_loans SET status = 'bad_debt' WHERE user_id = ? AND status = 'active'",
+                (user_id,)
+            )
+        except Exception:
+            pass
+        
+        # 删除双向关联的数据
+        dual_tables = [
+            ("dual_cultivation_requests", "from_id", "target_id"),
+            ("combat_cooldowns", "attacker_id", "defender_id"),
+            ("pending_gifts", "sender_id", "receiver_id"),
+        ]
+        
+        for table, col1, col2 in dual_tables:
+            try:
+                await self.conn.execute(f"DELETE FROM {table} WHERE {col1} = ? OR {col2} = ?", (user_id, user_id))
+            except Exception:
+                pass
+        
+        # 最后删除玩家主记录
         await self.conn.execute("DELETE FROM players WHERE user_id = ?", (user_id,))
         await self.conn.commit()
 
