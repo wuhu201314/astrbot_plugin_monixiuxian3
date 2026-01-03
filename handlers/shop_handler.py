@@ -201,9 +201,20 @@ class ShopHandler:
                 yield event.plain_result(f"未知的物品类型：{item_type}")
                 return
 
+            # --- 修复开始 ---
+            # 方案：使用直接 SQL 扣除灵石，避免 update_player 覆盖掉刚才存入储物戒的物品数据
+            await self.db.conn.execute(
+                "UPDATE players SET gold = gold - ? WHERE user_id = ?", 
+                (total_price, player.user_id)
+            )
+            # 更新内存中的 player 对象以便后续显示（虽然本函数马上结束了，但保持一致性是好习惯）
             player.gold -= total_price
-            await self.db.update_player(player)
+            
+            # 删除这行，因为它会导致数据覆盖！
+            # await self.db.update_player(player) 
+            
             await self.db.conn.commit()
+            # --- 修复结束 ---
             
             result_lines.append(f"花费灵石: {total_price}，剩余: {player.gold}")
             result_lines.append(f"剩余库存: {remaining}" if remaining > 0 else "该物品已售罄！")

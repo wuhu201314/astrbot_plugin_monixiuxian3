@@ -1,5 +1,6 @@
 # handlers/blessed_land_handlers.py
 """洞天福地处理器"""
+import re
 from astrbot.api.event import AstrMessageEvent
 from ..data import DataBase
 from ..managers.blessed_land_manager import BlessedLandManager
@@ -16,6 +17,27 @@ class BlessedLandHandlers:
         self.db = db
         self.mgr = blessed_land_mgr
     
+    def _parse_land_type_from_message(self, event: AstrMessageEvent) -> int:
+        """从原始消息中解析洞天类型"""
+        try:
+            raw_msg = event.get_message_str().strip()
+            # 移除命令前缀
+            if raw_msg.startswith('/'):
+                raw_msg = raw_msg[1:]
+            
+            # 移除命令本身
+            if raw_msg.startswith("购买洞天"):
+                raw_msg = raw_msg[4:].strip()
+            
+            # 提取数字
+            if raw_msg:
+                match = re.match(r'^(\d+)', raw_msg)
+                if match:
+                    return int(match.group(1))
+            return 0
+        except Exception:
+            return 0
+    
     @player_required
     async def handle_blessed_land_info(self, player: Player, event: AstrMessageEvent):
         """查看洞天信息"""
@@ -25,6 +47,10 @@ class BlessedLandHandlers:
     @player_required
     async def handle_purchase(self, player: Player, event: AstrMessageEvent, land_type: int = 0):
         """购买洞天"""
+        # 从原始消息解析洞天类型
+        if land_type <= 0:
+            land_type = self._parse_land_type_from_message(event)
+        
         if land_type <= 0:
             yield event.plain_result(
                 "🏔️ 购买洞天\n"

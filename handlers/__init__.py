@@ -25,6 +25,21 @@ from .blessed_land_handlers import BlessedLandHandlers
 from .spirit_farm_handlers import SpiritFarmHandlers
 from .dual_cultivation_handlers import DualCultivationHandlers
 from .spirit_eye_handlers import SpiritEyeHandlers
+# Phase 5: 沉浸式修仙系统
+from .tribulation_handlers import TribulationHandlers
+from .enlightenment_handlers import EnlightenmentHandlers
+from .fortune_handlers import FortuneHandlers
+from .inner_demon_handlers import InnerDemonHandlers
+# Phase 6: 灵石互动
+from .gold_interaction_handlers import GoldInteractionHandlers
+# Phase 7: 仙缘红包
+from .red_packet_handlers import RedPacketHandlers
+# Phase 8: 通天塔
+from .tower_handlers import TowerHandlers
+# Phase 9: 社交互动
+from .social_handlers import SocialHandlers
+# Phase 10: 黑市
+from .black_market_handler import BlackMarketHandler
 
 __all__ = [
     "PlayerHandler",
@@ -50,5 +65,20 @@ __all__ = [
     "BlessedLandHandlers",
     "SpiritFarmHandlers",
     "DualCultivationHandlers",
-    "SpiritEyeHandlers"
+    "SpiritEyeHandlers",
+    # Phase 5: 沉浸式修仙系统
+    "TribulationHandlers",
+    "EnlightenmentHandlers",
+    "FortuneHandlers",
+    "InnerDemonHandlers",
+    # Phase 6: 灵石互动
+    "GoldInteractionHandlers",
+    # Phase 7: 仙缘红包
+    "RedPacketHandlers",
+    # Phase 8: 通天塔
+    "TowerHandlers",
+    # Phase 9: 社交互动
+    "SocialHandlers",
+    # Phase 10: 黑市
+    "BlackMarketHandler",
 ]

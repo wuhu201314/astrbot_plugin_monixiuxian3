@@ -22,6 +22,11 @@ class BreakthroughHandler:
         self.config = config
         self.breakthrough_manager = BreakthroughManager(db, config_manager, config)
         self.pill_manager = PillManager(db, config_manager)
+        self.tribulation_manager = None  # 延迟初始化
+
+    def set_tribulation_manager(self, tribulation_manager):
+        """设置天劫管理器"""
+        self.tribulation_manager = tribulation_manager
 
     @player_required
     async def handle_breakthrough_info(self, player: Player, event: AstrMessageEvent):
@@ -172,7 +177,8 @@ class BreakthroughHandler:
             player,
             pill_name,
             modifiers["temp_bonus"],
-            modifiers["permanent_death_multiplier"]
+            modifiers["permanent_death_multiplier"],
+            self.tribulation_manager
         )
 
         if modifiers["has_temp_effects"]:

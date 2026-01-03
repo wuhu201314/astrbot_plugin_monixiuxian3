@@ -28,6 +28,15 @@ class PlayerHandler:
         self.config_manager = config_manager
         self.cultivation_manager = CultivationManager(config, config_manager)
         self.pill_manager = PillManager(self.db, self.config_manager)
+        self.enlightenment_manager = None  # 延迟初始化
+        self.inner_demon_manager = None  # 延迟初始化
+        self.fortune_manager = None  # 延迟初始化
+
+    def set_immersive_managers(self, enlightenment_mgr, inner_demon_mgr, fortune_mgr):
+        """设置沉浸式修仙系统管理器"""
+        self.enlightenment_manager = enlightenment_mgr
+        self.inner_demon_manager = inner_demon_mgr
+        self.fortune_manager = fortune_mgr
 
     async def handle_start_xiuxian(self, event: AstrMessageEvent, cultivation_type: str = ""):
         """处理创建角色
@@ -340,11 +349,43 @@ class PlayerHandler:
             technique_bonus,
             pill_multipliers
         )
+        
+        # 尝试触发悟道（沉浸式修仙系统）
+        enlightenment_msg = ""
+        if self.enlightenment_manager:
+            triggered, msg, bonus_exp = await self.enlightenment_manager.try_enlightenment(player, gained_exp)
+            if triggered:
+                gained_exp += bonus_exp
+                enlightenment_msg = f"\n\n{msg}"
+        
+        # 尝试触发心魔（沉浸式修仙系统）
+        demon_msg = ""
+        if self.inner_demon_manager:
+            triggered, msg, demon_data = await self.inner_demon_manager.try_trigger_demon(player)
+            if triggered:
+                demon_msg = f"\n\n{msg}"
+        
+        # 尝试触发福缘（沉浸式修仙系统）
+        fortune_msg = ""
+        if self.fortune_manager:
+            triggered, msg = await self.fortune_manager.try_fortune(player, "cultivation")
+            if triggered:
+                fortune_msg = f"\n\n{msg}"
 
         # 更新玩家数据
         player.experience += gained_exp
         player.state = "空闲"
         player.cultivation_start_time = 0
+        
+        # 闭关出关时恢复满HP（战斗属性）
+        # HP是根据修为计算的，这里重新计算并恢复满
+        from ..managers import CombatManager
+        hp, mp = CombatManager.calculate_hp_mp(player.experience)
+        old_hp = player.hp
+        player.hp = hp
+        player.mp = mp
+        recovered_hp = hp - old_hp if old_hp > 0 else hp
+        
         await self.db.update_player(player)
         await self.db.ext.set_user_free(player.user_id)
 
@@ -369,9 +410,14 @@ class PlayerHandler:
             f"⏱️ 闭关时长：{time_str}\n"
             f"📈 获得修为：{gained_exp:,}{exceed_msg}\n"
             f"💫 当前修为：{player.experience:,}\n"
+            f"❤️ HP已恢复：{hp:,}\n"
             "━━━━━━━━━━━━━━━\n"
             "道友已回归红尘，可继续修行。"
         )
+        
+        # 添加沉浸式修仙系统消息
+        reply_msg += enlightenment_msg + fortune_msg + demon_msg
+        
         yield event.plain_result(reply_msg)
 
     @player_required
@@ -413,3 +459,89 @@ class PlayerHandler:
             "明日再来，莫要忘记哦~"
         )
         yield event.plain_result(reply_msg)
+
+    # 逆天改命费用
+    REROLL_ROOT_COST = 10000
+
+    @player_required
+    async def handle_reroll_root(self, player: Player, event: AstrMessageEvent):
+        """处理逆天改命指令 - 重新生成灵根"""
+        # 检查灵石是否足够
+        if player.gold < self.REROLL_ROOT_COST:
+            yield event.plain_result(
+                f"❌ 灵石不足！\n"
+                f"逆天改命需要 {self.REROLL_ROOT_COST:,} 灵石\n"
+                f"当前灵石：{player.gold:,}"
+            )
+            return
+        
+        # 记录旧灵根
+        old_root = player.spiritual_root
+        old_root_name = old_root.replace("灵根", "")
+        old_description = self.cultivation_manager._get_root_description(old_root_name)
+        
+        # 生成新灵根
+        new_root = self.cultivation_manager._get_random_spiritual_root() + "灵根"
+        new_root_name = new_root.replace("灵根", "")
+        new_description = self.cultivation_manager._get_root_description(new_root_name)
+        
+        # 扣除灵石并更新灵根
+        player.gold -= self.REROLL_ROOT_COST
+        player.spiritual_root = new_root
+        await self.db.update_player(player)
+        
+        # 判断是否变好了
+        root_quality = self._get_root_quality(new_root_name)
+        old_quality = self._get_root_quality(old_root_name)
+        
+        if root_quality > old_quality:
+            result_emoji = "🎉"
+            result_text = "天命改写，灵根蜕变！"
+        elif root_quality < old_quality:
+            result_emoji = "😢"
+            result_text = "造化弄人，灵根退化..."
+        else:
+            result_emoji = "😐"
+            result_text = "命运轮回，灵根更替。"
+        
+        reply_msg = (
+            f"{result_emoji} 逆天改命！{result_emoji}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"消耗灵石：{self.REROLL_ROOT_COST:,}\n"
+            f"\n"
+            f"【原灵根】{old_root}\n"
+            f"  {old_description}\n"
+            f"\n"
+            f"【新灵根】{new_root}\n"
+            f"  {new_description}\n"
+            f"\n"
+            f"💫 {result_text}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"剩余灵石：{player.gold:,}"
+        )
+        yield event.plain_result(reply_msg)
+    
+    def _get_root_quality(self, root_name: str) -> int:
+        """获取灵根品质等级（用于比较）"""
+        # 品质从低到高
+        quality_map = {
+            # 废柴
+            "伪": 0,
+            # 四灵根
+            "金木水火": 1, "金木水土": 1, "金木火土": 1, "金水火土": 1, "木水火土": 1,
+            # 三灵根
+            "金木水": 2, "金木火": 2, "金木土": 2, "金水火": 2, "金水土": 2,
+            "金火土": 2, "木水火": 2, "木水土": 2, "木火土": 2, "水火土": 2,
+            # 双灵根
+            "金木": 3, "金水": 3, "金火": 3, "金土": 3, "木水": 3,
+            "木火": 3, "木土": 3, "水火": 3, "水土": 3, "火土": 3,
+            # 五行单灵根
+            "金": 4, "木": 4, "水": 4, "火": 4, "土": 4,
+            # 变异灵根
+            "雷": 5, "冰": 5, "风": 5, "暗": 5, "光": 5,
+            # 天灵根
+            "天金": 6, "天木": 6, "天水": 6, "天火": 6, "天土": 6,
+            # 混沌灵根
+            "混沌": 7,
+        }
+        return quality_map.get(root_name, 3)  # 默认返回中等品质

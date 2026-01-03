@@ -1,6 +1,7 @@
 # handlers/bank_handlers.py
 """灵石银行处理器 - 包含存取款、贷款、流水查询功能"""
 import time
+import re
 from astrbot.api.event import AstrMessageEvent
 from ..data import DataBase
 from ..managers.bank_manager import BankManager
@@ -16,6 +17,41 @@ class BankHandlers:
     def __init__(self, db: DataBase, bank_mgr: BankManager):
         self.db = db
         self.bank_mgr = bank_mgr
+    
+    def _parse_amount_from_message(self, event: AstrMessageEvent, command: str) -> int:
+        """从原始消息中解析金额参数
+        
+        Args:
+            event: 消息事件
+            command: 命令名称（如 "存灵石"、"取灵石"）
+            
+        Returns:
+            解析出的金额，解析失败返回0
+        """
+        try:
+            raw_msg = event.get_message_str().strip()
+            # 移除命令前缀 / 或其他
+            if raw_msg.startswith('/'):
+                raw_msg = raw_msg[1:]
+            
+            # 移除命令本身
+            if raw_msg.startswith(command):
+                raw_msg = raw_msg[len(command):].strip()
+            
+            # 尝试解析数字
+            if raw_msg:
+                # 支持 "全部" 或 "all" 关键字
+                if raw_msg.lower() in ['全部', 'all', '所有']:
+                    return -1  # 特殊值表示全部
+                
+                # 提取数字
+                match = re.match(r'^(\d+)', raw_msg)
+                if match:
+                    return int(match.group(1))
+            
+            return 0
+        except Exception:
+            return 0
     
     @player_required
     async def handle_bank_info(self, player: Player, event: AstrMessageEvent):
@@ -63,6 +99,10 @@ class BankHandlers:
     @player_required
     async def handle_deposit(self, player: Player, event: AstrMessageEvent, amount: int = 0):
         """存入灵石"""
+        # 从原始消息解析金额
+        if amount <= 0:
+            amount = self._parse_amount_from_message(event, "存灵石")
+        
         if amount <= 0:
             yield event.plain_result("❌ 请输入存款金额，例如：/存灵石 10000")
             return
@@ -74,8 +114,21 @@ class BankHandlers:
     @player_required
     async def handle_withdraw(self, player: Player, event: AstrMessageEvent, amount: int = 0):
         """取出灵石"""
+        # 从原始消息解析金额
         if amount <= 0:
-            yield event.plain_result("❌ 请输入取款金额，例如：/取灵石 10000")
+            amount = self._parse_amount_from_message(event, "取灵石")
+        
+        # 处理 "全部" 关键字
+        if amount == -1:
+            bank_data = await self.bank_mgr.db.ext.get_bank_account(player.user_id)
+            if bank_data and bank_data["balance"] > 0:
+                amount = bank_data["balance"]
+            else:
+                yield event.plain_result("❌ 银行余额为0，无法取款。")
+                return
+        
+        if amount <= 0:
+            yield event.plain_result("❌ 请输入取款金额，例如：/取灵石 10000\n💡 也可以输入 /取灵石 全部")
             return
         
         success, msg = await self.bank_mgr.withdraw(player, amount)
@@ -92,6 +145,10 @@ class BankHandlers:
     @player_required
     async def handle_loan(self, player: Player, event: AstrMessageEvent, amount: int = 0):
         """申请贷款"""
+        # 从原始消息解析金额
+        if amount <= 0:
+            amount = self._parse_amount_from_message(event, "贷款")
+        
         if amount <= 0:
             # 显示贷款帮助
             yield event.plain_result(
@@ -160,6 +217,10 @@ class BankHandlers:
     @player_required
     async def handle_breakthrough_loan(self, player: Player, event: AstrMessageEvent, amount: int = 0):
         """申请突破贷款（用于购买破境丹）"""
+        # 从原始消息解析金额
+        if amount <= 0:
+            amount = self._parse_amount_from_message(event, "突破贷款")
+        
         if amount <= 0:
             yield event.plain_result(
                 "🏦 突破贷款说明\n"
