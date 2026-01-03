@@ -42,6 +42,14 @@ class SpiritEyeManager:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
     
+    async def get_occupied_spirit_eyes(self) -> List[Dict]:
+        """获取所有已被占领的灵眼"""
+        async with self.db.conn.execute(
+            "SELECT * FROM spirit_eyes WHERE owner_id IS NOT NULL AND owner_id != '' ORDER BY eye_type DESC"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+    
     async def spawn_spirit_eye(self) -> Tuple[bool, str]:
         """生成新灵眼（定时调用）"""
         # 随机生成灵眼类型
@@ -65,7 +73,7 @@ class SpiritEyeManager:
         )
         await self.db.conn.commit()
         
-        return True, f"天地间出现了一处【{config['name']}】！速来抢占！"
+        return True, f"天地间出现了一处【{config['name']}】！每小时可获得 {config['exp_per_hour']:,} 修为，速来抢占！"
     
     async def claim_spirit_eye(self, player: Player, eye_id: int) -> Tuple[bool, str]:
         """抢占灵眼（原子操作）"""
@@ -125,14 +133,16 @@ class SpiritEyeManager:
         # 使用last_collect_time计算收益，如果没有则使用claim_time
         last_collect = eye.get("last_collect_time") or eye.get("claim_time", 0)
         now = int(time.time())
-        hours_passed = (now - last_collect) / 3600
         
-        if hours_passed < 1:
-            remaining = int(3600 - (now - last_collect))
+        # 使用整数除法避免浮点数精度问题
+        seconds_passed = now - last_collect
+        
+        if seconds_passed < 3600:
+            remaining = 3600 - seconds_passed
             return False, f"❌ 收取冷却中，还需 {remaining // 60} 分钟。"
         
-        # 计算收益（最多24小时）
-        hours = min(24, int(hours_passed))
+        # 计算收益（最多24小时），使用整数计算
+        hours = min(24, seconds_passed // 3600)
         exp_income = eye["exp_per_hour"] * hours
         
         player.experience += exp_income
@@ -174,25 +184,47 @@ class SpiritEyeManager:
         """获取灵眼信息"""
         my_eye = await self.get_user_spirit_eye(user_id)
         available = await self.get_available_spirit_eyes()
+        occupied = await self.get_occupied_spirit_eyes()
         
         lines = ["👁️ 天地灵眼", "━━━━━━━━━━━━━━━"]
         
+        # 我的灵眼
         if my_eye:
             now = int(time.time())
-            hours = (now - my_eye.get("claim_time", now)) / 3600
-            pending = int(min(24, hours) * my_eye["exp_per_hour"])
+            claim_time = my_eye.get("claim_time", now)
+            seconds_passed = now - claim_time
+            hours = min(24, seconds_passed // 3600)
+            pending = hours * my_eye["exp_per_hour"]
             lines.append(f"【我的灵眼】{my_eye['eye_name']}")
             lines.append(f"每小时：+{my_eye['exp_per_hour']:,} 修为")
             lines.append(f"待收取：约 +{pending:,} 修为")
             lines.append("")
         
+        # 可抢占的灵眼
         if available:
             lines.append("【可抢占的灵眼】")
             for eye in available[:5]:
-                lines.append(f"  [{eye['eye_id']}] {eye['eye_name']} (+{eye['exp_per_hour']}/时)")
+                lines.append(f"  [{eye['eye_id']}] {eye['eye_name']} (+{eye['exp_per_hour']:,}/时)")
+            if len(available) > 5:
+                lines.append(f"  ... 还有 {len(available) - 5} 个")
             lines.append("")
-            lines.append("💡 /抢占灵眼 <ID>")
         else:
-            lines.append("当前没有无主灵眼。")
+            lines.append("【可抢占的灵眼】无")
+            lines.append("")
+        
+        # 已被占领的灵眼
+        if occupied:
+            lines.append("【已被占领的灵眼】")
+            for eye in occupied[:10]:
+                owner_name = eye.get('owner_name') or '未知'
+                lines.append(f"  [{eye['eye_id']}] {eye['eye_name']} - {owner_name}")
+            if len(occupied) > 10:
+                lines.append(f"  ... 还有 {len(occupied) - 10} 个")
+            lines.append("")
+        
+        lines.append("━━━━━━━━━━━━━━━")
+        lines.append("💡 抢占灵眼 <ID> - 抢占无主灵眼")
+        lines.append("💡 灵眼收取 - 收取修为收益")
+        lines.append("💡 释放灵眼 - 释放占据的灵眼")
         
         return "\n".join(lines)

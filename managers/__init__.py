@@ -16,6 +16,19 @@ from .blessed_land_manager import BlessedLandManager
 from .spirit_farm_manager import SpiritFarmManager
 from .dual_cultivation_manager import DualCultivationManager
 from .spirit_eye_manager import SpiritEyeManager
+# Phase 5: 沉浸式修仙系统
+from .tribulation_manager import TribulationManager
+from .enlightenment_manager import EnlightenmentManager
+from .fortune_manager import FortuneManager
+from .inner_demon_manager import InnerDemonManager
+# Phase 6: 灵石互动
+from .gold_interaction_manager import GoldInteractionManager
+# Phase 7: 仙缘红包
+from .red_packet_manager import RedPacketManager
+# Phase 8: 通天塔
+from .tower_manager import TowerManager
+# Phase 9: 社交互动
+from .social_manager import SocialManager
 
 __all__ = [
     "CombatManager",
@@ -34,5 +47,18 @@ __all__ = [
     "BlessedLandManager",
     "SpiritFarmManager",
     "DualCultivationManager",
-    "SpiritEyeManager"
+    "SpiritEyeManager",
+    # Phase 5: 沉浸式修仙系统
+    "TribulationManager",
+    "EnlightenmentManager",
+    "FortuneManager",
+    "InnerDemonManager",
+    # Phase 6: 灵石互动
+    "GoldInteractionManager",
+    # Phase 7: 仙缘红包
+    "RedPacketManager",
+    # Phase 8: 通天塔
+    "TowerManager",
+    # Phase 9: 社交互动
+    "SocialManager",
 ]

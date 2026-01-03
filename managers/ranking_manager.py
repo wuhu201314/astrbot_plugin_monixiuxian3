@@ -53,10 +53,14 @@ class RankingManager:
         self.db = db
         self.combat_mgr = combat_mgr
         self.config_manager = config_manager
-        
-        # 延迟导入，避免循环依赖，只初始化一次
-        from ..core import EquipmentManager
-        self.equipment_manager = EquipmentManager(self.db, self.config_manager)
+        self.equipment_manager = None  # 延迟初始化
+    
+    def _get_equipment_manager(self):
+        """延迟获取装备管理器，避免循环依赖"""
+        if self.equipment_manager is None:
+            from ..core import EquipmentManager
+            self.equipment_manager = EquipmentManager(self.db, self.config_manager)
+        return self.equipment_manager
     
     async def get_level_ranking(self, limit: int = 10) -> Tuple[bool, str]:
         """
@@ -107,9 +111,10 @@ class RankingManager:
         
         # 计算战力（综合属性）
         player_power = []
+        equipment_mgr = self._get_equipment_manager()
         for player in all_players:
             # 获取装备加成
-            equipped_items = self.equipment_manager.get_equipped_items(
+            equipped_items = equipment_mgr.get_equipped_items(
                 player,
                 self.config_manager.items_data,
                 self.config_manager.weapons_data

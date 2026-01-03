@@ -20,9 +20,9 @@ class AdventureManager:
     
     # 历练时长配置（秒）及收益上限
     ADVENTURE_DURATIONS = {
-        "short": {"duration": 1800, "max_bonus_exp": 5000, "max_bonus_gold": 2000},      # 30分钟
-        "medium": {"duration": 3600, "max_bonus_exp": 15000, "max_bonus_gold": 5000},    # 1小时
-        "long": {"duration": 7200, "max_bonus_exp": 40000, "max_bonus_gold": 15000},     # 2小时
+        "short": {"duration": 180, "max_bonus_exp": 5000, "max_bonus_gold": 2000},      # 30分钟
+        "medium": {"duration": 360, "max_bonus_exp": 15000, "max_bonus_gold": 5000},    # 1小时
+        "long": {"duration": 720, "max_bonus_exp": 40000, "max_bonus_gold": 15000},     # 2小时
     }
     
     # 物品掉落表（按境界分组）
@@ -198,10 +198,19 @@ class AdventureManager:
                 if item_lines:
                     item_msg = "\n\n📦 获得物品：\n" + "\n".join(item_lines)
         
-        # 9. 应用奖励
+        # 9. 应用奖励 [修复：使用SQL直接更新，防止覆盖刚才存入的物品]
+        await self.db.conn.execute(
+            "UPDATE players SET experience = experience + ?, gold = gold + ? WHERE user_id = ?",
+            (final_exp, final_gold, player.user_id)
+        )
+        await self.db.conn.commit()
+
+        # 仅更新内存对象用于下方的消息显示
         player.experience += final_exp
         player.gold += final_gold
-        await self.db.update_player(player)
+        
+        # 删除这行，它会导致背包数据回档！
+        # await self.db.update_player(player)
         
         # 10. 清除CD
         await self.db.ext.set_user_free(user_id)

@@ -95,6 +95,9 @@ class BankManager:
         await self.db.conn.execute("BEGIN IMMEDIATE")
         try:
             player = await self.db.get_player_by_id(player.user_id)
+            if not player:
+                await self.db.conn.rollback()
+                return False, "玩家数据异常，请稍后重试。"
             if player.gold < amount:
                 await self.db.conn.rollback()
                 return False, f"灵石不足！你只有 {player.gold:,} 灵石。"
@@ -133,6 +136,9 @@ class BankManager:
         await self.db.conn.execute("BEGIN IMMEDIATE")
         try:
             player = await self.db.get_player_by_id(player.user_id)
+            if not player:
+                await self.db.conn.rollback()
+                return False, "玩家数据异常，请稍后重试。"
             bank_data = await self.db.ext.get_bank_account(player.user_id)
             if not bank_data or bank_data["balance"] < amount:
                 await self.db.conn.rollback()
@@ -225,6 +231,9 @@ class BankManager:
         await self.db.conn.execute("BEGIN IMMEDIATE")
         try:
             player = await self.db.get_player_by_id(player.user_id)
+            if not player:
+                await self.db.conn.rollback()
+                return False, "玩家数据异常，请稍后重试。"
             existing_loan = await self.db.ext.get_active_loan(player.user_id)
             if existing_loan:
                 await self.db.conn.rollback()
@@ -277,6 +286,9 @@ class BankManager:
         await self.db.conn.execute("BEGIN IMMEDIATE")
         try:
             player = await self.db.get_player_by_id(player.user_id)
+            if not player:
+                await self.db.conn.rollback()
+                return False, "玩家数据异常，请稍后重试。"
             loan_info = await self.get_loan_info(player)
             if not loan_info:
                 await self.db.conn.rollback()

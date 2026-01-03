@@ -102,8 +102,14 @@ class DualCultivationManager:
         if not target:
             return False, "❌ 对方还未踏入修仙之路。"
         
-        # 检查修为差距
-        exp_ratio = max(initiator.experience, target.experience) / max(min(initiator.experience, target.experience), 1)
+        # 检查修为差距（防止除以零）
+        min_exp = min(initiator.experience, target.experience)
+        max_exp = max(initiator.experience, target.experience)
+        # 如果双方修为都为0，允许双修（新手互助）
+        if max_exp == 0:
+            exp_ratio = 1.0
+        else:
+            exp_ratio = max_exp / max(min_exp, 1)
         if exp_ratio > DUAL_CULT_MAX_EXP_RATIO:
             return False, f"❌ 双方修为差距过大（最大{DUAL_CULT_MAX_EXP_RATIO}倍），无法双修。"
         
@@ -143,8 +149,13 @@ class DualCultivationManager:
             await self._delete_request(request["id"])
             return False, "❌ 请求发起者数据异常。"
         
-        # 再次检查修为差距
-        exp_ratio = max(initiator.experience, acceptor.experience) / max(min(initiator.experience, acceptor.experience), 1)
+        # 再次检查修为差距（防止除以零）
+        min_exp = min(initiator.experience, acceptor.experience)
+        max_exp = max(initiator.experience, acceptor.experience)
+        if max_exp == 0:
+            exp_ratio = 1.0
+        else:
+            exp_ratio = max_exp / max(min_exp, 1)
         if exp_ratio > DUAL_CULT_MAX_EXP_RATIO:
             await self._delete_request(request["id"])
             return False, f"❌ 双方修为差距已超过限制，双修取消。"

@@ -82,10 +82,11 @@ class BossManager:
         Returns:
             (成功标志, 消息, Boss对象)
         """
-        # 检查是否已有存活的Boss
-        existing_boss = await self.db.ext.get_active_boss()
-        if existing_boss:
-            return False, f"❌ 当前已有Boss『{existing_boss.boss_name}』存在！", None
+        # 检查当前Boss数量（最多同时存在5个）
+        existing_bosses = await self.db.ext.get_all_active_bosses()
+        max_bosses = self.config.get("max_bosses", 5)
+        if len(existing_bosses) >= max_bosses:
+            return False, f"❌ 当前已有 {len(existing_bosses)} 个Boss存在，已达上限！", None
         
         # 选择Boss等级
         if not level_config:
@@ -134,26 +135,29 @@ class BossManager:
 
 {boss_name}降临世间！
 
+🆔 Boss编号：{boss_id}
 境界：{level_config["name"]}
 HP：{max_hp}
 ATK：{atk}
 防御：{defense}%减伤
 奖励：{stone_reward}灵石
 
-快来挑战吧！
+发送「挑战Boss {boss_id}」来挑战！
         """.strip()
         
         return True, msg, boss
     
     async def challenge_boss(
         self,
-        user_id: str
+        user_id: str,
+        boss_id: int = 0
     ) -> Tuple[bool, str, Optional[Dict]]:
         """
         挑战Boss
         
         Args:
             user_id: 挑战者ID
+            boss_id: 指定Boss ID，0表示挑战最新的Boss
             
         Returns:
             (成功标志, 消息, 战斗结果)
@@ -163,10 +167,19 @@ ATK：{atk}
         if not player:
             return False, "❌ 你还未踏入修仙之路！", None
         
-        # 2. 检查Boss是否存在
-        boss = await self.db.ext.get_active_boss()
-        if not boss:
-            return False, "❌ 当前没有Boss！", None
+        # 2. 获取Boss
+        if boss_id > 0:
+            # 指定Boss ID
+            boss = await self.db.ext.get_boss_by_id(boss_id)
+            if not boss:
+                return False, f"❌ 未找到编号为 {boss_id} 的Boss！", None
+            if boss.status != 1:
+                return False, f"❌ Boss『{boss.boss_name}』已被击败！", None
+        else:
+            # 获取最新的Boss
+            boss = await self.db.ext.get_active_boss()
+            if not boss:
+                return False, "❌ 当前没有Boss！使用「世界Boss」查看Boss列表。", None
         
         # 3. 检查玩家状态
         user_cd = await self.db.ext.get_user_cd(user_id)
@@ -303,36 +316,70 @@ HP：{battle_result['player_final_hp']}/{player_stats.max_hp}
         
         return True, full_msg, battle_result
     
-    async def get_boss_info(self) -> Tuple[bool, str, Optional[Boss]]:
+    async def get_boss_info(self, boss_id: int = 0) -> Tuple[bool, str, Optional[Boss]]:
         """
-        获取当前Boss信息
+        获取Boss信息
         
+        Args:
+            boss_id: 指定Boss ID，0表示显示所有Boss列表
+            
         Returns:
             (成功标志, 消息, Boss对象)
         """
-        boss = await self.db.ext.get_active_boss()
-        if not boss:
-            return False, "❌ 当前没有Boss！", None
-        
-        hp_percent = (boss.hp / boss.max_hp) * 100
-        
-        msg = f"""
-👹 当前Boss
+        if boss_id > 0:
+            # 查看指定Boss
+            boss = await self.db.ext.get_boss_by_id(boss_id)
+            if not boss:
+                return False, f"❌ 未找到编号为 {boss_id} 的Boss！", None
+            
+            if boss.status != 1:
+                return False, f"❌ Boss『{boss.boss_name}』已被击败！", None
+            
+            hp_percent = (boss.hp / boss.max_hp) * 100
+            
+            msg = f"""
+👹 Boss详情
 ━━━━━━━━━━━━━━━
 
+🆔 编号：{boss.boss_id}
 名称：{boss.boss_name}
 境界：{boss.boss_level}
 
-HP：{boss.hp}/{boss.max_hp} ({hp_percent:.1f}%)
-ATK：{boss.atk}
+HP：{boss.hp:,}/{boss.max_hp:,} ({hp_percent:.1f}%)
+ATK：{boss.atk:,}
 防御：{boss.defense}%减伤
 
-奖励：{boss.stone_reward}灵石
+奖励：{boss.stone_reward:,}灵石
 
-使用 /挑战Boss 来挑战！
+发送「挑战Boss {boss.boss_id}」来挑战！
+            """.strip()
+            
+            return True, msg, boss
+        
+        # 显示所有Boss列表
+        bosses = await self.db.ext.get_all_active_bosses()
+        if not bosses:
+            return False, "❌ 当前没有Boss！等待Boss刷新...", None
+        
+        msg = f"""
+👹 世界Boss列表
+━━━━━━━━━━━━━━━
+"""
+        for boss in bosses:
+            hp_percent = (boss.hp / boss.max_hp) * 100
+            msg += f"""
+🆔 [{boss.boss_id}] {boss.boss_name}
+   境界：{boss.boss_level} | HP：{hp_percent:.0f}%
+   奖励：{boss.stone_reward:,}灵石
+"""
+        
+        msg += f"""
+━━━━━━━━━━━━━━━
+💡 挑战Boss <编号> - 挑战指定Boss
+💡 世界Boss <编号> - 查看Boss详情
         """.strip()
         
-        return True, msg, boss
+        return True, msg, bosses[0] if bosses else None
     
     async def auto_spawn_boss(self, player_count: int = 0) -> Tuple[bool, str, Optional[Boss]]:
         """
@@ -345,10 +392,11 @@ ATK：{boss.atk}
         Returns:
             (成功标志, 消息, Boss对象)
         """
-        # 检查是否已有Boss
-        existing_boss = await self.db.ext.get_active_boss()
-        if existing_boss:
-            return False, "当前已有Boss存在", None
+        # 检查当前Boss数量
+        existing_bosses = await self.db.ext.get_all_active_bosses()
+        max_bosses = self.config.get("max_bosses", 5)
+        if len(existing_bosses) >= max_bosses:
+            return False, f"当前已有 {len(existing_bosses)} 个Boss存在", None
         
         # 获取所有玩家的平均等级
         all_players = await self.db.get_all_players()
