@@ -12,13 +12,17 @@ from .handlers import (
     SectHandlers, BossHandlers, CombatHandlers, RankingHandlers,
     RiftHandlers, AdventureHandlers, AlchemyHandlers, ImpartHandlers,
     NicknameHandler, BankHandlers, BountyHandlers, ImpartPkHandlers,
-    BlessedLandHandlers, SpiritFarmHandlers, DualCultivationHandlers, SpiritEyeHandlers
+    BlessedLandHandlers, SpiritFarmHandlers, DualCultivationHandlers, SpiritEyeHandlers,
+    TribulationHandlers, EnlightenmentHandlers, FortuneHandlers, InnerDemonHandlers,
+    GoldInteractionHandlers, RedPacketHandlers, TowerHandlers, SocialHandlers
 )
 from .managers import (
     CombatManager, SectManager, BossManager, RiftManager, 
     RankingManager, AdventureManager, AlchemyManager, ImpartManager,
     BankManager, BountyManager, ImpartPkManager,
-    BlessedLandManager, SpiritFarmManager, DualCultivationManager, SpiritEyeManager
+    BlessedLandManager, SpiritFarmManager, DualCultivationManager, SpiritEyeManager,
+    TribulationManager, EnlightenmentManager, FortuneManager, InnerDemonManager,
+    GoldInteractionManager, RedPacketManager, TowerManager, SocialManager
 )
 
 
@@ -113,6 +117,7 @@ CMD_IMPART_INFO = "传承信息"
 
 # Phase 1: 道号系统
 CMD_CHANGE_NICKNAME = "改道号"
+CMD_REROLL_ROOT = "逆天改命"
 
 # Phase 2: 灵石银行
 CMD_BANK_INFO = "银行"
@@ -158,6 +163,54 @@ CMD_SPIRIT_EYE_INFO = "灵眼信息"
 CMD_SPIRIT_EYE_CLAIM = "抢占灵眼"
 CMD_SPIRIT_EYE_COLLECT = "灵眼收取"
 CMD_SPIRIT_EYE_RELEASE = "释放灵眼"
+
+# Phase 5: 沉浸式修仙系统
+CMD_TRIBULATION_INFO = "天劫信息"
+CMD_ENLIGHTENMENT_INFO = "悟道信息"
+CMD_FORTUNE_INFO = "福缘信息"
+CMD_CLAIM_FORTUNE = "求福缘"
+CMD_DEMON_INFO = "心魔信息"
+CMD_DEMON_RESIST = "抵抗"
+CMD_DEMON_SUBMIT = "屈服"
+
+# Phase 6: 灵石互动
+CMD_GIFT_GOLD = "送灵石"
+CMD_STEAL_GOLD = "偷灵石"
+CMD_ROB_GOLD = "抢灵石"
+CMD_GOLD_INTERACTION_INFO = "灵石互动"
+
+# Phase 7: 仙缘红包
+CMD_SEND_PACKET = "送仙缘"
+CMD_GRAB_PACKET = "抢仙缘"
+CMD_PACKET_INFO = "仙缘说明"
+
+# Phase 8: 通天塔
+CMD_TOWER_CHALLENGE = "挑战通天塔"
+CMD_TOWER_SPEED_RUN = "速通通天塔"
+CMD_TOWER_INFO = "通天塔信息"
+CMD_TOWER_BOSS = "通天塔BOSS"
+CMD_TOWER_RANKING = "通天塔排行榜"
+CMD_TOWER_POINTS_RANKING = "通天塔积分排行榜"
+CMD_TOWER_SHOP = "通天塔商店"
+CMD_TOWER_EXCHANGE = "通天塔兑换"
+CMD_TOWER_HELP = "通天塔帮助"
+
+# Phase 9: 社交互动
+CMD_RECRUIT = "收徒"
+CMD_APPRENTICE = "拜师"
+CMD_LEAVE_MASTER = "离开师门"
+CMD_MASTER_INFO = "师徒信息"
+CMD_PROPOSE = "求道侣"
+CMD_ACCEPT_COUPLE = "接受道侣"
+CMD_REJECT_COUPLE = "拒绝道侣"
+CMD_DIVORCE = "解除道侣"
+CMD_COUPLE_INFO = "道侣信息"
+CMD_DEBATE = "论道"
+CMD_SOCIAL_HELP = "社交帮助"
+
+# Phase 10: 黑市
+CMD_BLACK_MARKET = "黑市"
+CMD_BLACK_MARKET_BUY = "黑市购买"
 
 class XiuXianPlugin(Star):
     """修仙插件 - 文字修仙游戏"""
@@ -227,6 +280,46 @@ class XiuXianPlugin(Star):
         self.spirit_eye_mgr = SpiritEyeManager(self.db)
         self.spirit_eye_handlers = SpiritEyeHandlers(self.db, self.spirit_eye_mgr)
         
+        # Phase 5: 沉浸式修仙系统
+        self.tribulation_mgr = TribulationManager(self.db, self.config_manager)
+        self.tribulation_handlers = TribulationHandlers(self.db, self.tribulation_mgr)
+        self.enlightenment_mgr = EnlightenmentManager(self.db, self.config_manager)
+        self.enlightenment_handlers = EnlightenmentHandlers(self.db, self.enlightenment_mgr)
+        self.fortune_mgr = FortuneManager(self.db, self.config_manager)
+        self.fortune_handlers = FortuneHandlers(self.db, self.fortune_mgr)
+        self.inner_demon_mgr = InnerDemonManager(self.db, self.config_manager)
+        self.inner_demon_handlers = InnerDemonHandlers(self.db, self.inner_demon_mgr)
+        
+        # 设置天劫管理器到突破处理器
+        self.breakthrough_handler.set_tribulation_manager(self.tribulation_mgr)
+        
+        # 设置沉浸式修仙系统管理器到玩家处理器
+        self.player_handler.set_immersive_managers(
+            self.enlightenment_mgr,
+            self.inner_demon_mgr,
+            self.fortune_mgr
+        )
+        
+        # Phase 6: 灵石互动
+        self.gold_interaction_mgr = GoldInteractionManager(self.db, self.config_manager)
+        self.gold_interaction_handlers = GoldInteractionHandlers(self.db, self.gold_interaction_mgr)
+        
+        # Phase 7: 仙缘红包
+        self.red_packet_mgr = RedPacketManager(self.db, self.config_manager)
+        self.red_packet_handlers = RedPacketHandlers(self.db, self.red_packet_mgr)
+        
+        # Phase 8: 通天塔
+        self.tower_mgr = TowerManager(self.db, self.combat_mgr, self.config_manager)
+        self.tower_handlers = TowerHandlers(self.db, self.tower_mgr)
+        
+        # Phase 9: 社交互动
+        self.social_mgr = SocialManager(self.db, self.config_manager)
+        self.social_handlers = SocialHandlers(self.db, self.social_mgr)
+        
+        # Phase 10: 黑市
+        from .handlers import BlackMarketHandler
+        self.black_market_handler = BlackMarketHandler(self.db, self.config_manager)
+        
         self.boss_task = None # Boss生成任务
         self.loan_check_task = None # 贷款逾期检查任务
         self.spirit_eye_task = None # 灵眼生成任务
@@ -235,11 +328,36 @@ class XiuXianPlugin(Star):
         access_control_config = self.config.get("ACCESS_CONTROL", {})
         self.whitelist_groups = [str(g) for g in access_control_config.get("WHITELIST_GROUPS", [])]
         self.boss_admins = [str(a) for a in access_control_config.get("BOSS_ADMINS", [])]
+        
+        # 活跃群聊集合（用于广播，当白名单为空时自动收集）
+        self.active_groups = set()
 
         logger.info(f"【修仙插件】XiuXianPlugin 初始化完成，数据库路径: {db_path}")
+        logger.info(f"【修仙插件】白名单群聊: {self.whitelist_groups}")
+        logger.info(f"【修仙插件】Boss管理员: {self.boss_admins}")
+    
+    def _record_active_group(self, event: AstrMessageEvent):
+        """记录活跃的群聊（用于广播）"""
+        group_id = event.get_group_id()
+        if group_id:
+            group_str = str(group_id)
+            if group_str not in self.active_groups:
+                self.active_groups.add(group_str)
+                logger.info(f"【修仙插件】记录活跃群聊: {group_str}，当前活跃群: {list(self.active_groups)}")
+    
+    def _get_broadcast_groups(self) -> list:
+        """获取要广播的群列表"""
+        if self.whitelist_groups:
+            logger.debug(f"【修仙插件】使用白名单群聊: {self.whitelist_groups}")
+            return self.whitelist_groups
+        logger.debug(f"【修仙插件】使用活跃群聊: {list(self.active_groups)}")
+        return list(self.active_groups)
 
     def _check_access(self, event: AstrMessageEvent) -> bool:
         """检查访问权限，支持群聊白名单控制"""
+        # 记录活跃群聊
+        self._record_active_group(event)
+        
         # 如果没有配置白名单，允许所有访问
         if not self.whitelist_groups:
             return True
@@ -280,6 +398,11 @@ class XiuXianPlugin(Star):
         # 确保系统配置表存在
         await self.db.ext.ensure_system_config_table()
         
+        # 确保默认秘境数据存在
+        rifts_added = await self.db.ext.ensure_default_rifts()
+        if rifts_added:
+            logger.info("【修仙插件】已初始化默认秘境数据")
+        
         # 启动定时任务
         self.boss_task = asyncio.create_task(self._schedule_boss_spawn())
         self.loan_check_task = asyncio.create_task(self._schedule_loan_check())
@@ -306,6 +429,7 @@ class XiuXianPlugin(Star):
         
         retry_count = 0
         max_retry_delay = 3600
+        max_retry_count = 10  # 最大重试次数
         
         while True:
             try:
@@ -328,10 +452,14 @@ class XiuXianPlugin(Star):
                 
                 # 尝试生成Boss
                 if self.boss_mgr:
+                    logger.info("【修仙插件】开始尝试生成Boss...")
                     success, msg, boss = await self.boss_mgr.auto_spawn_boss()
+                    logger.info(f"【修仙插件】Boss生成结果: success={success}, msg={msg}")
                     if success and boss:
                         logger.info(f"【修仙插件】自动生成Boss: {boss.boss_name}")
                         await self._broadcast_boss_spawn(boss)
+                    else:
+                        logger.info(f"【修仙插件】Boss未生成: {msg}")
                 
                 # 设置下次刷新时间
                 next_spawn_time = int(time.time()) + interval
@@ -345,46 +473,83 @@ class XiuXianPlugin(Star):
             except Exception as e:
                 logger.error(f"Boss生成任务异常: {e}")
                 retry_count += 1
-                delay = min(60 * (2 ** retry_count), max_retry_delay)
-                logger.info(f"【修仙插件】Boss任务将在 {delay} 秒后重试（第{retry_count}次）")
-                await asyncio.sleep(delay)
+                if retry_count >= max_retry_count:
+                    logger.error(f"【修仙插件】Boss任务重试次数已达上限({max_retry_count})，任务暂停")
+                    # 等待较长时间后重置重试计数，继续尝试
+                    await asyncio.sleep(max_retry_delay * 2)
+                    retry_count = 0
+                else:
+                    delay = min(60 * (2 ** retry_count), max_retry_delay)
+                    logger.info(f"【修仙插件】Boss任务将在 {delay} 秒后重试（第{retry_count}次）")
+                    await asyncio.sleep(delay)
 
     async def _broadcast_boss_spawn(self, boss):
         """广播Boss刷新消息到所有白名单群聊"""
         from astrbot.api.event import MessageChain
         
-        if not self.whitelist_groups:
-            logger.debug("【修仙插件】未配置白名单群聊，跳过Boss广播")
+        broadcast_groups = self._get_broadcast_groups()
+        if not broadcast_groups:
+            logger.info("【修仙插件】没有可广播的群聊（白名单为空且无活跃群聊），跳过Boss广播")
             return
+        
+        logger.info(f"【修仙插件】准备广播Boss消息到 {len(broadcast_groups)} 个群: {broadcast_groups}")
         
         # 构建广播消息
         broadcast_msg = (
             f"👹 世界Boss降临！\n"
             f"━━━━━━━━━━━━━━━\n"
+            f"🆔 编号：{boss.boss_id}\n"
             f"名称：{boss.boss_name}\n"
             f"境界：{boss.boss_level}\n"
-            f"血量：{boss.hp}/{boss.max_hp}\n"
-            f"攻击：{boss.atk}\n"
+            f"血量：{boss.hp:,}/{boss.max_hp:,}\n"
+            f"攻击：{boss.atk:,}\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 击败奖励：{boss.stone_reward} 灵石\n"
-            f"⚔️ 发送「挑战Boss」参与讨伐！"
+            f"💰 击败奖励：{boss.stone_reward:,} 灵石\n"
+            f"⚔️ 发送「挑战Boss {boss.boss_id}」参与讨伐！\n"
+            f"📋 发送「世界Boss」查看所有Boss"
         )
         
         message_chain = MessageChain().message(broadcast_msg)
         
-        # 获取所有平台实例
+        # 获取所有平台实例并发送
         try:
             platforms = self.context.platform_manager.get_insts()
+            logger.info(f"【修仙插件】获取到 {len(platforms)} 个平台实例")
+            
             for platform in platforms:
-                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "unknown"
-                for group_id in self.whitelist_groups:
-                    # 构建 unified_msg_origin: platform_name:message_type:session_id
-                    umo = f"{platform_name}:GroupMessage:{group_id}"
-                    try:
-                        await self.context.send_message(umo, message_chain)
-                        logger.debug(f"【修仙插件】Boss广播已发送到群 {group_id}")
-                    except Exception as e:
-                        logger.warning(f"【修仙插件】Boss广播发送失败 (群{group_id}): {e}")
+                # 获取平台名称
+                platform_name = "aiocqhttp"  # 默认使用 aiocqhttp
+                try:
+                    if hasattr(platform, 'meta'):
+                        meta = platform.meta()
+                        if hasattr(meta, 'name'):
+                            platform_name = meta.name
+                        logger.info(f"【修仙插件】平台名称: {platform_name}")
+                except Exception as e:
+                    logger.warning(f"【修仙插件】获取平台名称失败: {e}")
+                
+                for group_id in broadcast_groups:
+                    # 尝试多种 UMO 格式
+                    umo_formats = [
+                        f"{platform_name}:GroupMessage:{group_id}",
+                        f"aiocqhttp:GroupMessage:{group_id}",
+                        f"qq:GroupMessage:{group_id}",
+                    ]
+                    
+                    sent = False
+                    for umo in umo_formats:
+                        try:
+                            logger.info(f"【修仙插件】尝试发送到 UMO: {umo}")
+                            await self.context.send_message(umo, message_chain)
+                            logger.info(f"【修仙插件】Boss广播成功发送到群 {group_id} (UMO: {umo})")
+                            sent = True
+                            break
+                        except Exception as e:
+                            logger.warning(f"【修仙插件】UMO {umo} 发送失败: {e}")
+                    
+                    if not sent:
+                        logger.warning(f"【修仙插件】Boss广播发送失败，所有UMO格式都不成功 (群{group_id})")
+                        
         except Exception as e:
             logger.error(f"【修仙插件】Boss广播异常: {e}")
 
@@ -392,7 +557,8 @@ class XiuXianPlugin(Star):
         """广播Boss被击杀消息到所有白名单群聊"""
         from astrbot.api.event import MessageChain
         
-        if not self.whitelist_groups:
+        broadcast_groups = self._get_broadcast_groups()
+        if not broadcast_groups:
             return
         
         reward = battle_result.get("reward", 0)
@@ -413,8 +579,8 @@ class XiuXianPlugin(Star):
         try:
             platforms = self.context.platform_manager.get_insts()
             for platform in platforms:
-                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "unknown"
-                for group_id in self.whitelist_groups:
+                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "aiocqhttp"
+                for group_id in broadcast_groups:
                     umo = f"{platform_name}:GroupMessage:{group_id}"
                     try:
                         await self.context.send_message(umo, message_chain)
@@ -429,6 +595,7 @@ class XiuXianPlugin(Star):
         
         retry_count = 0
         max_retry_delay = 3600
+        max_retry_count = 10  # 最大重试次数
         
         while True:
             try:
@@ -453,15 +620,21 @@ class XiuXianPlugin(Star):
             except Exception as e:
                 logger.error(f"贷款检查任务异常: {e}")
                 retry_count += 1
-                delay = min(60 * (2 ** retry_count), max_retry_delay)
-                logger.info(f"【修仙插件】贷款检查任务将在 {delay} 秒后重试（第{retry_count}次）")
-                await asyncio.sleep(delay)
+                if retry_count >= max_retry_count:
+                    logger.error(f"【修仙插件】贷款检查任务重试次数已达上限({max_retry_count})，任务暂停")
+                    await asyncio.sleep(max_retry_delay * 2)
+                    retry_count = 0
+                else:
+                    delay = min(60 * (2 ** retry_count), max_retry_delay)
+                    logger.info(f"【修仙插件】贷款检查任务将在 {delay} 秒后重试（第{retry_count}次）")
+                    await asyncio.sleep(delay)
 
     async def _broadcast_loan_death(self, loan_info: dict):
         """广播贷款逾期玩家被追杀的消息"""
         from astrbot.api.event import MessageChain
         
-        if not self.whitelist_groups:
+        broadcast_groups = self._get_broadcast_groups()
+        if not broadcast_groups:
             return
         
         player_name = loan_info.get("player_name", "某修士")
@@ -482,8 +655,8 @@ class XiuXianPlugin(Star):
         try:
             platforms = self.context.platform_manager.get_insts()
             for platform in platforms:
-                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "unknown"
-                for group_id in self.whitelist_groups:
+                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "aiocqhttp"
+                for group_id in broadcast_groups:
                     umo = f"{platform_name}:GroupMessage:{group_id}"
                     try:
                         await self.context.send_message(umo, message_chain)
@@ -498,6 +671,7 @@ class XiuXianPlugin(Star):
         
         retry_count = 0
         max_retry_delay = 3600
+        max_retry_count = 10  # 最大重试次数
         
         while True:
             try:
@@ -537,9 +711,14 @@ class XiuXianPlugin(Star):
             except Exception as e:
                 logger.error(f"灵眼生成任务异常: {e}")
                 retry_count += 1
-                delay = min(60 * (2 ** retry_count), max_retry_delay)
-                logger.info(f"【修仙插件】灵眼任务将在 {delay} 秒后重试（第{retry_count}次）")
-                await asyncio.sleep(delay)
+                if retry_count >= max_retry_count:
+                    logger.error(f"【修仙插件】灵眼任务重试次数已达上限({max_retry_count})，任务暂停")
+                    await asyncio.sleep(max_retry_delay * 2)
+                    retry_count = 0
+                else:
+                    delay = min(60 * (2 ** retry_count), max_retry_delay)
+                    logger.info(f"【修仙插件】灵眼任务将在 {delay} 秒后重试（第{retry_count}次）")
+                    await asyncio.sleep(delay)
 
     async def _schedule_bounty_check(self):
         """悬赏过期检查定时任务（每30分钟检查一次）"""
@@ -559,17 +738,25 @@ class XiuXianPlugin(Star):
         """广播灵眼刷新消息"""
         from astrbot.api.event import MessageChain
         
-        if not self.whitelist_groups:
+        broadcast_groups = self._get_broadcast_groups()
+        if not broadcast_groups:
             return
         
-        broadcast_msg = f"👁️ {msg}\n💡 使用 /灵眼信息 查看详情"
+        broadcast_msg = (
+            f"👁️ 天地灵眼出现！\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"{msg}\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"💡 发送「灵眼信息」查看详情\n"
+            f"💡 发送「抢占灵眼 ID」抢占"
+        )
         message_chain = MessageChain().message(broadcast_msg)
         
         try:
             platforms = self.context.platform_manager.get_insts()
             for platform in platforms:
-                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "unknown"
-                for group_id in self.whitelist_groups:
+                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "aiocqhttp"
+                for group_id in broadcast_groups:
                     umo = f"{platform_name}:GroupMessage:{group_id}"
                     try:
                         await self.context.send_message(umo, message_chain)
@@ -577,6 +764,36 @@ class XiuXianPlugin(Star):
                         logger.warning(f"【修仙插件】灵眼广播发送失败 (群{group_id}): {e}")
         except Exception as e:
             logger.error(f"【修仙插件】灵眼广播异常: {e}")
+
+    async def _broadcast_message(self, message: str, log_tag: str = "通用"):
+        """通用广播消息到所有白名单群聊
+        
+        Args:
+            message: 要广播的消息内容
+            log_tag: 日志标签，用于区分不同类型的广播
+        """
+        from astrbot.api.event import MessageChain
+        
+        broadcast_groups = self._get_broadcast_groups()
+        if not broadcast_groups:
+            logger.debug(f"【修仙插件】没有可广播的群聊，跳过{log_tag}广播")
+            return
+        
+        message_chain = MessageChain().message(message)
+        
+        try:
+            platforms = self.context.platform_manager.get_insts()
+            for platform in platforms:
+                platform_name = platform.meta().name if hasattr(platform, 'meta') and callable(platform.meta) else "aiocqhttp"
+                for group_id in broadcast_groups:
+                    umo = f"{platform_name}:GroupMessage:{group_id}"
+                    try:
+                        await self.context.send_message(umo, message_chain)
+                        logger.debug(f"【修仙插件】{log_tag}广播已发送到群 {group_id}")
+                    except Exception as e:
+                        logger.warning(f"【修仙插件】{log_tag}广播发送失败 (群{group_id}): {e}")
+        except Exception as e:
+            logger.error(f"【修仙插件】{log_tag}广播异常: {e}")
 
     @filter.command(CMD_HELP, "显示帮助信息")
     @require_whitelist
@@ -612,6 +829,12 @@ class XiuXianPlugin(Star):
     @require_whitelist
     async def handle_check_in(self, event: AstrMessageEvent):
         async for r in self.player_handler.handle_check_in(event):
+            yield r
+
+    @filter.command(CMD_REROLL_ROOT, "逆天改命重置灵根")
+    @require_whitelist
+    async def handle_reroll_root(self, event: AstrMessageEvent):
+        async for r in self.player_handler.handle_reroll_root(event):
             yield r
 
     @filter.command(CMD_SHOW_EQUIPMENT, "查看已装备的物品")
@@ -824,15 +1047,15 @@ class XiuXianPlugin(Star):
 
     @filter.command(CMD_BOSS_INFO, "查看世界Boss状态")
     @require_whitelist
-    async def handle_boss_info(self, event: AstrMessageEvent):
-        async for r in self.boss_handlers.handle_boss_info(event):
+    async def handle_boss_info(self, event: AstrMessageEvent, boss_id: int = 0):
+        async for r in self.boss_handlers.handle_boss_info(event, boss_id):
             yield r
 
     @filter.command(CMD_BOSS_FIGHT, "挑战世界Boss")
     @require_whitelist
-    async def handle_boss_fight(self, event: AstrMessageEvent):
+    async def handle_boss_fight(self, event: AstrMessageEvent, boss_id: int = 0):
         user_id = event.get_sender_id()
-        success, msg, battle_result = await self.boss_handlers.handle_boss_fight(user_id)
+        success, msg, battle_result = await self.boss_handlers.handle_boss_fight(user_id, boss_id)
         yield event.plain_result(msg)
         
         if success and battle_result and battle_result.get("winner") == user_id:
@@ -943,8 +1166,19 @@ class XiuXianPlugin(Star):
     # ===== 历练指令 =====
     @filter.command(CMD_ADVENTURE_START, "开始历练")
     @require_whitelist
-    async def handle_adventure_start(self, event: AstrMessageEvent):
-        async for r in self.adventure_handlers.handle_start_adventure(event, "medium"):
+    async def handle_adventure_start(self, event: AstrMessageEvent, type_name: str = "中途"):
+        # 1. 定义中文到英文的映射
+        type_map = {
+            "短途": "short", "short": "short",
+            "中途": "medium", "medium": "medium",
+            "长途": "long", "long": "long"
+        }
+        
+        # 2. 获取对应的内部标识（如果没有匹配到，默认中途）
+        adventure_type = type_map.get(type_name, "medium")
+        
+        # 3. 将转换后的 adventure_type 传递给处理器
+        async for r in self.adventure_handlers.handle_start_adventure(event, adventure_type):
             yield r
 
     @filter.command(CMD_ADVENTURE_COMPLETE, "完成历练")
@@ -1193,4 +1427,234 @@ class XiuXianPlugin(Star):
     @require_whitelist
     async def handle_spirit_eye_release(self, event: AstrMessageEvent):
         async for r in self.spirit_eye_handlers.handle_release(event):
+            yield r
+
+    # ===== Phase 5: 沉浸式修仙系统 =====
+    
+    @filter.command(CMD_TRIBULATION_INFO, "查看天劫信息")
+    @require_whitelist
+    async def handle_tribulation_info(self, event: AstrMessageEvent):
+        async for r in self.tribulation_handlers.handle_tribulation_info(event):
+            yield r
+
+    @filter.command(CMD_ENLIGHTENMENT_INFO, "查看悟道信息")
+    @require_whitelist
+    async def handle_enlightenment_info(self, event: AstrMessageEvent):
+        async for r in self.enlightenment_handlers.handle_enlightenment_info(event):
+            yield r
+
+    @filter.command(CMD_FORTUNE_INFO, "查看福缘信息")
+    @require_whitelist
+    async def handle_fortune_info(self, event: AstrMessageEvent):
+        async for r in self.fortune_handlers.handle_fortune_info(event):
+            yield r
+
+    @filter.command(CMD_CLAIM_FORTUNE, "求取福缘")
+    @require_whitelist
+    async def handle_claim_fortune(self, event: AstrMessageEvent):
+        async for r in self.fortune_handlers.handle_claim_fortune(event):
+            yield r
+
+    @filter.command(CMD_DEMON_INFO, "查看心魔信息")
+    @require_whitelist
+    async def handle_demon_info(self, event: AstrMessageEvent):
+        async for r in self.inner_demon_handlers.handle_demon_info(event):
+            yield r
+
+    @filter.command(CMD_DEMON_RESIST, "抵抗心魔")
+    @require_whitelist
+    async def handle_demon_resist(self, event: AstrMessageEvent):
+        async for r in self.inner_demon_handlers.handle_demon_response(event, "抵抗"):
+            yield r
+
+    @filter.command(CMD_DEMON_SUBMIT, "屈服心魔")
+    @require_whitelist
+    async def handle_demon_submit(self, event: AstrMessageEvent):
+        async for r in self.inner_demon_handlers.handle_demon_response(event, "屈服"):
+            yield r
+
+
+    # ===== Phase 6: 灵石互动 =====
+    
+    @filter.command(CMD_GIFT_GOLD, "赠送灵石给其他玩家")
+    @require_whitelist
+    async def handle_gift_gold(self, event: AstrMessageEvent, args: str = ""):
+        async for r in self.gold_interaction_handlers.handle_gift_gold(event, args):
+            yield r
+
+    @filter.command(CMD_STEAL_GOLD, "偷取其他玩家的灵石")
+    @require_whitelist
+    async def handle_steal_gold(self, event: AstrMessageEvent, target: str = ""):
+        async for r in self.gold_interaction_handlers.handle_steal_gold(event, target):
+            yield r
+
+    @filter.command(CMD_ROB_GOLD, "抢夺其他玩家的灵石")
+    @require_whitelist
+    async def handle_rob_gold(self, event: AstrMessageEvent, target: str = ""):
+        async for r in self.gold_interaction_handlers.handle_rob_gold(event, target):
+            yield r
+
+    @filter.command(CMD_GOLD_INTERACTION_INFO, "查看灵石互动说明")
+    @require_whitelist
+    async def handle_gold_interaction_info(self, event: AstrMessageEvent):
+        async for r in self.gold_interaction_handlers.handle_interaction_info(event):
+            yield r
+
+    # ===== Phase 7: 仙缘红包 =====
+    
+    @filter.command(CMD_SEND_PACKET, "发送仙缘红包")
+    @require_whitelist
+    async def handle_send_packet(self, event: AstrMessageEvent, args: str = ""):
+        async for r in self.red_packet_handlers.handle_send_packet(event, args):
+            yield r
+
+    @filter.command(CMD_GRAB_PACKET, "抢仙缘红包")
+    @require_whitelist
+    async def handle_grab_packet(self, event: AstrMessageEvent):
+        async for r in self.red_packet_handlers.handle_grab_packet(event):
+            yield r
+
+    @filter.command(CMD_PACKET_INFO, "查看仙缘红包说明")
+    @require_whitelist
+    async def handle_packet_info(self, event: AstrMessageEvent):
+        async for r in self.red_packet_handlers.handle_packet_info(event):
+            yield r
+
+    # ===== Phase 8: 通天塔 =====
+    
+    @filter.command(CMD_TOWER_CHALLENGE, "挑战通天塔")
+    @require_whitelist
+    async def handle_tower_challenge(self, event: AstrMessageEvent):
+        async for r in self.tower_handlers.handle_challenge(event):
+            yield r
+
+    @filter.command(CMD_TOWER_SPEED_RUN, "速通通天塔")
+    @require_whitelist
+    async def handle_tower_speed_run(self, event: AstrMessageEvent, floors: int = 10):
+        async for r in self.tower_handlers.handle_speed_run(event, floors):
+            yield r
+
+    @filter.command(CMD_TOWER_INFO, "查看通天塔信息")
+    @require_whitelist
+    async def handle_tower_info(self, event: AstrMessageEvent):
+        async for r in self.tower_handlers.handle_tower_info(event):
+            yield r
+
+    @filter.command(CMD_TOWER_BOSS, "查看通天塔Boss")
+    @require_whitelist
+    async def handle_tower_boss(self, event: AstrMessageEvent):
+        async for r in self.tower_handlers.handle_boss_info(event):
+            yield r
+
+    @filter.command(CMD_TOWER_RANKING, "通天塔排行榜")
+    @require_whitelist
+    async def handle_tower_ranking(self, event: AstrMessageEvent):
+        async for r in self.tower_handlers.handle_floor_ranking(event):
+            yield r
+
+    @filter.command(CMD_TOWER_POINTS_RANKING, "通天塔积分排行榜")
+    @require_whitelist
+    async def handle_tower_points_ranking(self, event: AstrMessageEvent):
+        async for r in self.tower_handlers.handle_points_ranking(event):
+            yield r
+
+    @filter.command(CMD_TOWER_SHOP, "通天塔商店")
+    @require_whitelist
+    async def handle_tower_shop(self, event: AstrMessageEvent):
+        async for r in self.tower_handlers.handle_shop(event):
+            yield r
+
+    @filter.command(CMD_TOWER_EXCHANGE, "通天塔兑换")
+    @require_whitelist
+    async def handle_tower_exchange(self, event: AstrMessageEvent, item_id: int = 0):
+        async for r in self.tower_handlers.handle_exchange(event, item_id):
+            yield r
+
+    @filter.command(CMD_TOWER_HELP, "通天塔帮助")
+    @require_whitelist
+    async def handle_tower_help(self, event: AstrMessageEvent):
+        async for r in self.tower_handlers.handle_tower_help(event):
+            yield r
+
+
+    # ===== Phase 9: 社交互动 =====
+    
+    @filter.command(CMD_RECRUIT, "收徒")
+    @require_whitelist
+    async def handle_recruit(self, event: AstrMessageEvent, target: str = ""):
+        async for r in self.social_handlers.handle_recruit(event, target):
+            yield r
+
+    @filter.command(CMD_APPRENTICE, "拜师")
+    @require_whitelist
+    async def handle_apprentice(self, event: AstrMessageEvent, target: str = ""):
+        async for r in self.social_handlers.handle_apprentice(event, target):
+            yield r
+
+    @filter.command(CMD_LEAVE_MASTER, "离开师门")
+    @require_whitelist
+    async def handle_leave_master(self, event: AstrMessageEvent):
+        async for r in self.social_handlers.handle_leave_master(event):
+            yield r
+
+    @filter.command(CMD_MASTER_INFO, "查看师徒信息")
+    @require_whitelist
+    async def handle_master_info(self, event: AstrMessageEvent):
+        async for r in self.social_handlers.handle_master_info(event):
+            yield r
+
+    @filter.command(CMD_PROPOSE, "求道侣")
+    @require_whitelist
+    async def handle_propose(self, event: AstrMessageEvent, target: str = ""):
+        async for r in self.social_handlers.handle_propose(event, target):
+            yield r
+
+    @filter.command(CMD_ACCEPT_COUPLE, "接受道侣")
+    @require_whitelist
+    async def handle_accept_couple(self, event: AstrMessageEvent):
+        async for r in self.social_handlers.handle_accept_couple(event):
+            yield r
+
+    @filter.command(CMD_REJECT_COUPLE, "拒绝道侣")
+    @require_whitelist
+    async def handle_reject_couple(self, event: AstrMessageEvent):
+        async for r in self.social_handlers.handle_reject_couple(event):
+            yield r
+
+    @filter.command(CMD_DIVORCE, "解除道侣")
+    @require_whitelist
+    async def handle_divorce(self, event: AstrMessageEvent):
+        async for r in self.social_handlers.handle_divorce(event):
+            yield r
+
+    @filter.command(CMD_COUPLE_INFO, "查看道侣信息")
+    @require_whitelist
+    async def handle_couple_info(self, event: AstrMessageEvent):
+        async for r in self.social_handlers.handle_couple_info(event):
+            yield r
+
+    @filter.command(CMD_DEBATE, "论道")
+    @require_whitelist
+    async def handle_debate(self, event: AstrMessageEvent, target: str = ""):
+        async for r in self.social_handlers.handle_debate(event, target):
+            yield r
+
+    @filter.command(CMD_SOCIAL_HELP, "社交帮助")
+    @require_whitelist
+    async def handle_social_help(self, event: AstrMessageEvent):
+        async for r in self.social_handlers.handle_social_help(event):
+            yield r
+
+    # ===== Phase 10: 黑市 =====
+    
+    @filter.command(CMD_BLACK_MARKET, "查看黑市")
+    @require_whitelist
+    async def handle_black_market(self, event: AstrMessageEvent):
+        async for r in self.black_market_handler.handle_black_market(event):
+            yield r
+
+    @filter.command(CMD_BLACK_MARKET_BUY, "黑市购买丹药")
+    @require_whitelist
+    async def handle_black_market_buy(self, event: AstrMessageEvent, item_name: str = "", quantity: int = 1):
+        async for r in self.black_market_handler.handle_black_market_buy(event, item_name, quantity):
             yield r

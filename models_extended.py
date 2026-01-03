@@ -50,7 +50,7 @@ class Sect:
             if self.mainbuff == "0" or not self.mainbuff:
                 return []
             return json.loads(self.mainbuff) if isinstance(self.mainbuff, str) else [self.mainbuff]
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return []
     
     def set_mainbuff_list(self, buff_list: List[int]):
@@ -63,7 +63,7 @@ class Sect:
             if self.secbuff == "0" or not self.secbuff:
                 return []
             return json.loads(self.secbuff) if isinstance(self.secbuff, str) else [self.secbuff]
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return []
     
     def set_secbuff_list(self, buff_list: List[int]):
@@ -117,7 +117,7 @@ class Rift:
         """获取奖励字典"""
         try:
             return json.loads(self.rewards)
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return {}
     
     def set_rewards(self, rewards_dict: dict):
@@ -152,7 +152,7 @@ class UserCd:
         """获取额外数据字典"""
         try:
             return json.loads(self.extra_data)
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return {}
     
     def set_extra_data(self, data: dict):

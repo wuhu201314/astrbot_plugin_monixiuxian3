@@ -59,16 +59,19 @@ class ConfigManager:
                 return default_config
             except Exception as e:
                 logger.error(f"创建配置文件 {file_path} 失败: {e}")
-                return default_config
+                return default_config.copy()  # 返回副本避免修改默认配置
         
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 logger.info(f"成功加载配置文件: {file_path.name}")
                 return data
+        except json.JSONDecodeError as e:
+            logger.error(f"配置文件 {file_path} JSON格式错误: {e}")
+            return default_config.copy()
         except Exception as e:
             logger.error(f"加载配置文件 {file_path} 失败: {e}")
-            return default_config
+            return default_config.copy()
 
     def _load_items_data(self, file_path: Path) -> Dict[str, dict]:
         """加载物品配置文件并转换为字典（key为物品名称）"""
@@ -118,6 +121,9 @@ class ConfigManager:
         self.rift_config = self._load_config_with_default(config_dir / "rift_config.json", RIFT_CONFIG)
         self.alchemy_config = self._load_config_with_default(config_dir / "alchemy_config.json", ALCHEMY_CONFIG)
         self.alchemy_recipes = self._load_items_data(config_dir / "alchemy_recipes.json")
+        
+        # 加载通天塔配置
+        self.tower_config = self._load_config_with_default(config_dir / "tower_config.json", {})
         
         # 加载游戏配置（包含各系统的硬编码参数）
         self.game_config = self._load_config_with_default(config_dir / "game_config.json", {})

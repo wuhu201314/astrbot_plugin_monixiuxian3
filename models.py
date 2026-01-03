@@ -140,7 +140,7 @@ class Player:
         """获取功法列表"""
         try:
             return json.loads(self.techniques)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return []
 
     def set_techniques_list(self, techniques_list: List[str]):
@@ -151,7 +151,7 @@ class Player:
         """获取当前生效的临时丹药效果列表"""
         try:
             return json.loads(self.active_pill_effects)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return []
 
     def set_active_pill_effects(self, effects: List[dict]):
@@ -162,7 +162,7 @@ class Player:
         """获取永久丹药累积增益"""
         try:
             return json.loads(self.permanent_pill_gains)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return {}
 
     def set_permanent_pill_gains(self, gains: dict):
@@ -173,7 +173,7 @@ class Player:
         """获取丹药背包"""
         try:
             return json.loads(self.pills_inventory)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return {}
 
     def set_pills_inventory(self, inventory: dict):
@@ -184,7 +184,7 @@ class Player:
         """获取储物戒物品"""
         try:
             return json.loads(self.storage_ring_items)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return {}
 
     def set_storage_ring_items(self, items: dict):
