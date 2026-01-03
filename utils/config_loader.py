@@ -12,17 +12,24 @@ class ConfigLoader:
             os.makedirs(config_dir)
 
     def load_config(self, filename: str, default_config: Dict[str, Any]) -> Dict[str, Any]:
-        """加载配置，所谓文件不存在则创建默认配置"""
+        """加载配置，如果文件不存在则创建默认配置"""
         file_path = os.path.join(self.config_dir, filename)
         
         if not os.path.exists(file_path):
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(default_config, f, ensure_ascii=False, indent=2)
-            return default_config
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(default_config, f, ensure_ascii=False, indent=2)
+                return default_config.copy()
+            except Exception as e:
+                print(f"Error creating config {filename}: {e}")
+                return default_config.copy()
         
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing config {filename}: {e}")
+            return default_config.copy()
         except Exception as e:
             print(f"Error loading config {filename}: {e}")
-            return default_config
+            return default_config.copy()
